@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ApiProvider } from '@easydev/api-client';
 import { AnalyticsProvider } from '@easydev/analytics';
-import { ThemeProvider } from '@easydev/design-system';
+import { DesignSystemProvider } from '@easydev/design-system';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333';
 
@@ -22,13 +22,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ThemeProvider defaultTheme="light">
+    <DesignSystemProvider defaultTheme="light">
       <ApiProvider config={apiConfig}>
         <React.Suspense fallback={null}>
           <TenantIdSync tenantIdRef={tenantIdRef} />
         </React.Suspense>
         <AnalyticsProvider app="customer-widget">{children}</AnalyticsProvider>
       </ApiProvider>
-    </ThemeProvider>
+    </DesignSystemProvider>
   );
 }

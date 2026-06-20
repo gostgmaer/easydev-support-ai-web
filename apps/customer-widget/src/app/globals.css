@@ -1,3 +1,5 @@
+@import '@easydev/design-system/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,6 +13,6 @@ html.dark {
 }
 
 body {
-  @apply bg-transparent text-neutral-900 antialiased dark:text-neutral-50;
+  @apply bg-transparent text-foreground antialiased;
   font-family: 'Inter', sans-serif;
 }
