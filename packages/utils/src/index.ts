@@ -7,3 +7,4 @@ export * from './storage';
 export * from './id';
 export * from './date';
 export * from './focus';
+export * from './cookies';

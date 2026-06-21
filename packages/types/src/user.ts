@@ -5,6 +5,9 @@ export interface Role {
   description?: string;
 }
 
+/** Lightweight pointer to a role, as embedded in tenant memberships and permission grants. */
+export type RoleReference = Role;
+
 export interface User {
   id: string;
   email: string;
@@ -30,4 +33,19 @@ export interface UserProfileUpdate {
   avatarUrl?: string;
   locale?: string;
   timezone?: string;
+}
+
+/** Full profile view-model for account-management pages; richer than the session-embedded User. */
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  avatarUrl?: string;
+  phone?: string;
+  locale: string;
+  timezone: string;
+  mfaEnabled: boolean;
+  roles: RoleReference[];
+  createdAt: string;
+  updatedAt: string;
 }

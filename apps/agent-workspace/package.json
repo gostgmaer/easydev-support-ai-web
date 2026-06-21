@@ -6,9 +6,18 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@easydev/api-client": "workspace:*",
+    "@easydev/auth": "workspace:*",
+    "@easydev/design-system": "workspace:*",
+    "@easydev/feature-flags": "workspace:*",
+    "@easydev/permissions": "workspace:*",
+    "@easydev/stores": "workspace:*",
+    "@easydev/types": "workspace:*",
+    "@easydev/utils": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-dropdown-menu": "^2.1.2",
     "@radix-ui/react-popover": "^1.1.2",

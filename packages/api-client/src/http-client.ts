@@ -1,10 +1,16 @@
-import { generateRequestId, retry, type RetryOptions } from '@easydev/utils';
+import { generateRequestId, readCookie, retry, type RetryOptions } from '@easydev/utils';
 import type { AuthTokens } from '@easydev/types';
 import { mapHttpError, mapNetworkError, ApiClientError } from './errors';
 import type { ApiClientConfig, HttpMethod, RequestOptions } from './types';
 
 const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const IDEMPOTENT_METHODS = new Set<HttpMethod>(['GET']);
+
+/** Double-submit CSRF pair: IAM sets a readable cookie alongside the httpOnly refresh
+ * cookie; every mutating request echoes it back as a header so a cross-site request
+ * (which can't read the cookie to forge the header) is rejected server-side. */
+const CSRF_COOKIE_NAME = 'XSRF-TOKEN';
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
 
 const DEFAULT_RETRY: RetryOptions = {
   attempts: 3,
@@ -44,6 +50,11 @@ export class ApiClient {
     if (!options.skipAuth) {
       const token = this.getAccessToken();
       if (token) headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    if (options.method && options.method !== 'GET') {
+      const csrfToken = readCookie(CSRF_COOKIE_NAME);
+      if (csrfToken) headers.set(CSRF_HEADER_NAME, csrfToken);
     }
 
     if (options.body !== undefined && !(options.body instanceof FormData)) {

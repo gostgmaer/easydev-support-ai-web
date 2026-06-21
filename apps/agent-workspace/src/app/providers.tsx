@@ -1,26 +1,32 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { AuthProvider, useAuth } from '@easydev/auth';
+import { PermissionProvider } from '@easydev/permissions';
+import { FeatureFlagProvider } from '@easydev/feature-flags';
+import { ThemeProvider, TenantBrandingProvider } from '@easydev/design-system';
 import { useInboxStore } from '../store/inboxStore';
 import { useRealtime } from '../hooks/useRealtime';
 import { CommandPalette } from '../components/command-palette';
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        refetchOnWindowFocus: false,
-        retry: 2,
-      },
-    },
-  }));
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333';
 
+/** Applies the active tenant's brand colors once a session is resolved; falls back to the
+ * default palette while unauthenticated or for unbranded tenants. */
+function TenantBrandingBridge({ children }: { children: React.ReactNode }) {
+  const { tenant } = useAuth();
+  return <TenantBrandingProvider branding={tenant?.branding ?? null}>{children}</TenantBrandingProvider>;
+}
+
+/** Houses everything that needs the real signed-in agent's identity: realtime presence,
+ * the command palette, and keyboard shortcuts. Must render inside AuthProvider. */
+function WorkspaceShell({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [cmdOpen, setCmdOpen] = useState(false);
   const setSelectedView = useInboxStore((state) => state.setSelectedView);
 
-  // Initialize Realtime Sync using a mock agentId for agent workspace context
-  useRealtime('agent-101');
+  useRealtime(user?.id);
 
   useEffect(() => {
     let keyBuffer = '';
@@ -78,7 +84,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('easydev-open-command-palette', handleOpenPalette);
-    
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('easydev-open-command-palette', handleOpenPalette);
@@ -87,9 +93,27 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [setSelectedView]);
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
       {children}
       <CommandPalette isOpen={cmdOpen} onClose={() => setCmdOpen(false)} />
-    </QueryClientProvider>
+    </>
+  );
+}
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+
+  return (
+    <ThemeProvider defaultTheme="light">
+      <AuthProvider baseUrl={API_BASE_URL} onUnauthenticated={() => router.replace('/login')}>
+        <TenantBrandingBridge>
+          <PermissionProvider>
+            <FeatureFlagProvider>
+              <WorkspaceShell>{children}</WorkspaceShell>
+            </FeatureFlagProvider>
+          </PermissionProvider>
+        </TenantBrandingBridge>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

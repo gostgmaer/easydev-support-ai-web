@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ApiProvider } from '@easydev/api-client';
+import { FeatureFlagProvider } from '@easydev/feature-flags';
 import { AnalyticsProvider } from '@easydev/analytics';
 import { DesignSystemProvider } from '@easydev/design-system';
 
@@ -27,7 +28,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <React.Suspense fallback={null}>
           <TenantIdSync tenantIdRef={tenantIdRef} />
         </React.Suspense>
-        <AnalyticsProvider app="customer-widget">{children}</AnalyticsProvider>
+        {/* Anonymous visitor context: no @easydev/auth or @easydev/permissions here by design -
+            the widget never represents an IAM identity, only a per-tenant feature toggle. */}
+        <FeatureFlagProvider>
+          <AnalyticsProvider app="customer-widget">{children}</AnalyticsProvider>
+        </FeatureFlagProvider>
       </ApiProvider>
     </DesignSystemProvider>
   );

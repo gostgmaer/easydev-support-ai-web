@@ -13,6 +13,7 @@
     "@easydev/analytics": "workspace:*",
     "@easydev/api-client": "workspace:*",
     "@easydev/design-system": "workspace:*",
+    "@easydev/feature-flags": "workspace:*",
     "@easydev/stores": "workspace:*",
     "@easydev/types": "workspace:*",
     "@easydev/utils": "workspace:*",

@@ -12,8 +12,10 @@
   "dependencies": {
     "@easydev/analytics": "workspace:*",
     "@easydev/api-client": "workspace:*",
+    "@easydev/auth": "workspace:*",
     "@easydev/design-system": "workspace:*",
     "@easydev/feature-flags": "workspace:*",
+    "@easydev/permissions": "workspace:*",
     "@easydev/stores": "workspace:*",
     "@easydev/types": "workspace:*",
     "@easydev/utils": "workspace:*",

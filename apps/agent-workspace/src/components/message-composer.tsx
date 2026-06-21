@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Eye, ShieldAlert, Paperclip, Sparkles } from 'lucide-react';
+import { useAuth } from '@easydev/auth';
 import { useInboxStore } from '../store/inboxStore';
 import { useSendMessage } from '../hooks/useQueries';
 import { useRealtime } from '../hooks/useRealtime';
 
 export function MessageComposer() {
+  const { user } = useAuth();
   const activeConversationId = useInboxStore((state) => state.activeConversationId);
   const [content, setContent] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
@@ -12,7 +14,7 @@ export function MessageComposer() {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const sendMessageMutation = useSendMessage();
-  const { emitTyping } = useRealtime('agent-101');
+  const { emitTyping } = useRealtime(user?.id);
 
   useEffect(() => {
     // Reset composer state on conversation switch

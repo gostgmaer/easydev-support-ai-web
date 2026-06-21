@@ -1,33 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useApiClient } from '@easydev/api-client';
+import { useAuth } from '@easydev/auth';
 import { useInboxStore } from '../store/inboxStore';
 import { useConversationStore } from '../store/conversationStore';
 import { useTicketStore } from '../store/ticketStore';
 import { Conversation, Message, Customer, Ticket, KnowledgeArticle, Notification } from '../types';
 
-// Mock API Call helpers simulating server interactions
-const apiRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer mock-agent-token',
-    },
-    ...options,
-  });
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.statusText}`);
-  }
-  return response.json();
-};
-
 // 1. QUERY HOOKS
 export function useConversations(view: string, filters: Record<string, unknown>) {
+  const api = useApiClient();
   const setConversations = useInboxStore((state) => state.setConversations);
   return useQuery<Conversation[]>({
     queryKey: ['conversations', view, filters],
     queryFn: async () => {
-      // simulate delay/mock fetch in production-ready way pointing to real path
-      const data = await apiRequest<Conversation[]>(`/conversations?view=${view}&filters=${JSON.stringify(filters)}`);
+      const data = await api.get<Conversation[]>('/v1/conversations', {
+        query: { view, filters: JSON.stringify(filters) },
+      });
       setConversations(data);
       return data;
     },
@@ -36,12 +24,13 @@ export function useConversations(view: string, filters: Record<string, unknown>)
 }
 
 export function useConversationMessages(conversationId: string | null) {
+  const api = useApiClient();
   const setMessages = useConversationStore((state) => state.setMessages);
   return useQuery<Message[]>({
     queryKey: ['messages', conversationId],
     queryFn: async () => {
       if (!conversationId) return [];
-      const data = await apiRequest<Message[]>(`/conversations/${conversationId}/messages`);
+      const data = await api.get<Message[]>(`/v1/messages/conversation/${conversationId}`);
       setMessages(conversationId, data);
       return data;
     },
@@ -50,23 +39,25 @@ export function useConversationMessages(conversationId: string | null) {
 }
 
 export function useCustomerDetails(customerId: string | null) {
+  const api = useApiClient();
   return useQuery<Customer>({
     queryKey: ['customer', customerId],
     queryFn: async () => {
       if (!customerId) throw new Error('Customer ID is required');
-      return apiRequest<Customer>(`/customers/${customerId}`);
+      return api.get<Customer>(`/v1/customers/${customerId}`);
     },
     enabled: !!customerId,
   });
 }
 
 export function useTicketDetails(ticketId: string | null) {
+  const api = useApiClient();
   const setTicket = useTicketStore((state) => state.setTicket);
   return useQuery<Ticket>({
     queryKey: ['ticket', ticketId],
     queryFn: async () => {
       if (!ticketId) throw new Error('Ticket ID is required');
-      const data = await apiRequest<Ticket>(`/tickets/${ticketId}`);
+      const data = await api.get<Ticket>(`/v1/tickets/${ticketId}`);
       setTicket(ticketId, data);
       return data;
     },
@@ -75,28 +66,30 @@ export function useTicketDetails(ticketId: string | null) {
 }
 
 export function useKnowledgeSearch(query: string) {
+  const api = useApiClient();
   return useQuery<KnowledgeArticle[]>({
     queryKey: ['knowledge', query],
     queryFn: async () => {
       if (!query.trim()) return [];
-      return apiRequest<KnowledgeArticle[]>(`/knowledge?query=${encodeURIComponent(query)}`);
+      return api.get<KnowledgeArticle[]>('/v1/knowledge-search', { query: { query } });
     },
     enabled: query.length > 1,
   });
 }
 
 export function useNotificationsList() {
+  const api = useApiClient();
   return useQuery<Notification[]>({
     queryKey: ['notifications'],
-    queryFn: async () => {
-      return apiRequest<Notification[]>('/notifications');
-    },
+    queryFn: async () => api.get<Notification[]>('/v1/notifications'),
   });
 }
 
 // 2. MUTATION HOOKS
 export function useSendMessage() {
+  const api = useApiClient();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const addMessage = useConversationStore((state) => state.addMessage);
 
   return useMutation({
@@ -109,20 +102,17 @@ export function useSendMessage() {
       content: string;
       isInternalNote: boolean;
     }) => {
-      return apiRequest<Message>(`/conversations/${conversationId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ content, isInternalNote }),
-      });
+      return api.post<Message>('/v1/messages', { conversationId, content, isInternalNote });
     },
     onMutate: async (variables) => {
       // Cancel queries to avoid overwrites
       await queryClient.cancelQueries({ queryKey: ['messages', variables.conversationId] });
-      
+
       const tempMessage: Message = {
         id: `temp-${Date.now()}`,
         conversationId: variables.conversationId,
-        senderId: 'current-agent',
-        senderName: 'You',
+        senderId: user?.id ?? 'unknown',
+        senderName: user?.displayName ?? 'You',
         senderType: 'agent',
         content: variables.content,
         isInternalNote: variables.isInternalNote,
@@ -150,14 +140,14 @@ export function useSendMessage() {
 }
 
 export function useAssignConversation() {
+  const api = useApiClient();
   const queryClient = useQueryClient();
   const updateConversation = useInboxStore((state) => state.updateConversation);
 
   return useMutation({
     mutationFn: async ({ conversationId, agentId }: { conversationId: string; agentId: string }) => {
-      return apiRequest<Conversation>(`/conversations/${conversationId}/assign`, {
-        method: 'POST',
-        body: JSON.stringify({ agentId }),
+      return api.post<Conversation>(`/v1/conversations/${conversationId}/assignment/manual`, {
+        agentProfileId: agentId,
       });
     },
     onMutate: async ({ conversationId, agentId }) => {
@@ -171,15 +161,13 @@ export function useAssignConversation() {
 }
 
 export function useUpdateAiStatus() {
+  const api = useApiClient();
   const queryClient = useQueryClient();
   const updateConversation = useInboxStore((state) => state.updateConversation);
 
   return useMutation({
     mutationFn: async ({ conversationId, status }: { conversationId: string; status: 'active' | 'paused' | 'takeover' }) => {
-      return apiRequest<Conversation>(`/conversations/${conversationId}/ai-status`, {
-        method: 'POST',
-        body: JSON.stringify({ status }),
-      });
+      return api.post<Conversation>(`/v1/conversations/${conversationId}/ai-status`, { status });
     },
     onMutate: async ({ conversationId, status }) => {
       updateConversation(conversationId, { aiStatus: status });
@@ -191,15 +179,13 @@ export function useUpdateAiStatus() {
 }
 
 export function useUpdateTicket() {
+  const api = useApiClient();
   const queryClient = useQueryClient();
   const updateTicketState = useTicketStore((state) => state.updateTicket);
 
   return useMutation({
     mutationFn: async ({ ticketId, updates }: { ticketId: string; updates: Partial<Ticket> }) => {
-      return apiRequest<Ticket>(`/tickets/${ticketId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(updates),
-      });
+      return api.put<Ticket>(`/v1/tickets/${ticketId}`, updates);
     },
     onMutate: async ({ ticketId, updates }) => {
       updateTicketState(ticketId, updates);

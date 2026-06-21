@@ -2,9 +2,10 @@
 
 import * as React from 'react';
 import { ApiProvider } from '@easydev/api-client';
-import { useAuthStore, useTenantStore } from '@easydev/stores';
+import { useAuthStore, useFeatureFlagStore, useTenantStore } from '@easydev/stores';
 import type { LoginCredentials, UserProfileUpdate } from '@easydev/types';
 import { toAppError } from '@easydev/utils';
+import { createAuthBroadcastChannel, type AuthBroadcastChannel } from './broadcast';
 import { createAuthClients } from './create-auth-clients';
 import { IamClient } from './iam-client';
 
@@ -35,6 +36,7 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
   const setAvailableTenants = useTenantStore((state) => state.setAvailable);
 
   const refreshTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const broadcastRef = React.useRef<AuthBroadcastChannel | null>(null);
 
   const { apiClient, iamClient } = React.useMemo(
     () =>
@@ -44,6 +46,14 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
       }),
     [baseUrl, onUnauthenticated],
   );
+
+  /** Clears every store this provider owns - used on logout, locally or via another tab. */
+  const resetAllAuthState = React.useCallback(() => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    clearAuth();
+    useTenantStore.getState().reset();
+    useFeatureFlagStore.getState().reset();
+  }, [clearAuth]);
 
   const scheduleRefresh = React.useCallback(
     (expiresAt: number) => {
@@ -55,33 +65,40 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
           setTokens(tokens);
           scheduleRefresh(tokens.expiresAt);
         } catch {
-          clearAuth();
+          resetAllAuthState();
           onUnauthenticated?.();
         }
       }, delay);
     },
-    [iamClient, setTokens, clearAuth, onUnauthenticated],
+    [iamClient, setTokens, resetAllAuthState, onUnauthenticated],
   );
+
+  /** Exchanges the httpOnly refresh cookie for a fresh access token + session. Shared by the
+   * mount bootstrap and by cross-tab resync (the access token itself never crosses tabs - each
+   * tab re-derives it from the cookie, which the browser already shares). */
+  const resync = React.useCallback(async (): Promise<boolean> => {
+    try {
+      const tokens = await iamClient.refreshTokens();
+      setTokens(tokens);
+      const session = await iamClient.getSession();
+      setSession(session);
+      setTenant(session.tenant);
+      setAvailableTenants(session.memberships);
+      scheduleRefresh(tokens.expiresAt);
+      return true;
+    } catch {
+      return false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iamClient]);
 
   React.useEffect(() => {
     let cancelled = false;
     setStatus('authenticating');
 
-    iamClient
-      .refreshTokens()
-      .then(async (tokens) => {
-        if (cancelled) return;
-        setTokens(tokens);
-        const session = await iamClient.getSession();
-        if (cancelled) return;
-        setSession(session);
-        setTenant(session.tenant);
-        setAvailableTenants(session.memberships);
-        scheduleRefresh(tokens.expiresAt);
-      })
-      .catch(() => {
-        if (!cancelled) setStatus('unauthenticated');
-      });
+    resync().then((ok) => {
+      if (!cancelled && !ok) setStatus('unauthenticated');
+    });
 
     return () => {
       cancelled = true;
@@ -89,6 +106,31 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [iamClient]);
+
+  React.useEffect(() => {
+    const channel = createAuthBroadcastChannel();
+    broadcastRef.current = channel;
+
+    const unsubscribe = channel.subscribe((message) => {
+      if (message.type === 'logout') {
+        resetAllAuthState();
+        onUnauthenticated?.();
+        return;
+      }
+      // 'session-changed': another tab logged in, switched tenant, or updated the
+      // profile - re-derive this tab's view of the session from the shared refresh cookie.
+      if (useAuthStore.getState().status !== 'authenticating') {
+        resync();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      channel.close();
+      broadcastRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetAllAuthState, onUnauthenticated]);
 
   const login = React.useCallback(
     async (credentials: LoginCredentials) => {
@@ -99,6 +141,7 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
         setTenant(session.tenant);
         setAvailableTenants(session.memberships);
         scheduleRefresh(session.tokens.expiresAt);
+        broadcastRef.current?.post({ type: 'session-changed' });
       } catch (error) {
         setStatus('unauthenticated');
         throw toAppError(error);
@@ -108,13 +151,13 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
   );
 
   const logout = React.useCallback(async () => {
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     try {
       await iamClient.logout();
     } finally {
-      clearAuth();
+      resetAllAuthState();
+      broadcastRef.current?.post({ type: 'logout' });
     }
-  }, [iamClient, clearAuth]);
+  }, [iamClient, resetAllAuthState]);
 
   const switchTenant = React.useCallback(
     async (tenantId: string) => {
@@ -123,9 +166,11 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
         const result = await iamClient.switchTenant(tenantId);
         setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken, expiresAt: Date.now() + 15 * 60_000 });
         setTenant(result.tenant);
+        useFeatureFlagStore.getState().reset();
         const session = await iamClient.getSession();
         setSession(session);
         setAvailableTenants(session.memberships);
+        broadcastRef.current?.post({ type: 'session-changed' });
       } finally {
         useTenantStore.getState().setSwitching(false);
       }
@@ -145,6 +190,7 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
           permissions: current.permissions,
           tokens: current.tokens!,
         });
+        broadcastRef.current?.post({ type: 'session-changed' });
       }
     },
     [iamClient, setSession],
@@ -177,6 +223,9 @@ export function useAuth() {
     tenant,
     permissions,
     isAuthenticated: status === 'authenticated',
+    /** Direct IAM access for flows the high-level actions below don't cover
+     * (forgot/reset/change password, active sessions, profile fetch). */
+    iamClient: ctx.iamClient,
     login: ctx.login,
     logout: ctx.logout,
     switchTenant: ctx.switchTenant,

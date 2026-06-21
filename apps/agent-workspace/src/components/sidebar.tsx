@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Sparkles
 } from 'lucide-react';
+import { Can } from '@easydev/permissions';
 import { useInboxStore } from '../store/inboxStore';
 import { useNotificationStore } from '../store/notificationStore';
 
@@ -122,16 +123,18 @@ export function Sidebar() {
             )}
           </Link>
 
-          <Link
-            href="/settings"
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 ${
-              pathname === '/settings' ? 'bg-primary-50 text-primary-600' : ''
-            }`}
-            title={isCollapsed ? 'Settings' : undefined}
-          >
-            <Settings className="h-5 w-5 flex-shrink-0" />
-            {!isCollapsed && <span>Settings</span>}
-          </Link>
+          <Can resource="settings" action="view">
+            <Link
+              href="/settings"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 ${
+                pathname === '/settings' ? 'bg-primary-50 text-primary-600' : ''
+              }`}
+              title={isCollapsed ? 'Settings' : undefined}
+            >
+              <Settings className="h-5 w-5 flex-shrink-0" />
+              {!isCollapsed && <span>Settings</span>}
+            </Link>
+          </Can>
         </div>
 
         {/* Collapse Toggle */}

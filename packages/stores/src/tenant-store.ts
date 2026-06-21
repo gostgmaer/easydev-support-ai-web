@@ -8,6 +8,7 @@ export interface TenantState {
   setCurrent: (tenant: Tenant) => void;
   setAvailable: (memberships: TenantMembership[]) => void;
   setSwitching: (switching: boolean) => void;
+  reset: () => void;
 }
 
 export const useTenantStore = create<TenantState>((set) => ({
@@ -17,4 +18,5 @@ export const useTenantStore = create<TenantState>((set) => ({
   setCurrent: (tenant) => set({ current: tenant }),
   setAvailable: (memberships) => set({ available: memberships }),
   setSwitching: (switching) => set({ switching }),
+  reset: () => set({ current: null, available: [], switching: false }),
 }));

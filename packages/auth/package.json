@@ -11,6 +11,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./middleware": {
+      "types": "./dist/middleware.d.ts",
+      "import": "./dist/middleware.js",
+      "require": "./dist/middleware.cjs"
     }
   },
   "files": ["dist"],
@@ -21,9 +26,13 @@
   },
   "dependencies": {
     "@easydev/api-client": "workspace:*",
+    "@easydev/design-system": "workspace:*",
     "@easydev/stores": "workspace:*",
     "@easydev/types": "workspace:*",
-    "@easydev/utils": "workspace:*"
+    "@easydev/utils": "workspace:*",
+    "@hookform/resolvers": "^3.9.1",
+    "react-hook-form": "^7.54.0",
+    "zod": "^3.24.1"
   },
   "peerDependencies": {
     "next": "^15.0.0",

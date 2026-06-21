@@ -1,5 +1,7 @@
 import React from 'react';
-import { ShieldCheck, Wifi, WifiOff, Search, UserCheck } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ShieldCheck, Wifi, WifiOff, Search, UserCheck, LogOut } from 'lucide-react';
+import { useAuth } from '@easydev/auth';
 import { useRealtimeStore } from '../store/realtimeStore';
 import { AgentStatus } from '../types';
 
@@ -8,8 +10,27 @@ interface TopbarProps {
 }
 
 export function Topbar({ onSearchClick }: TopbarProps) {
+  const router = useRouter();
+  const { user, tenant, logout } = useAuth();
   const connected = useRealtimeStore((state) => state.connected);
   const [status, setStatus] = React.useState<AgentStatus>('online');
+  const [signingOut, setSigningOut] = React.useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await logout();
+    } finally {
+      router.replace('/login');
+    }
+  };
+
+  const initials = user?.displayName
+    ?.split(' ')
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   const statusColors = {
     online: 'bg-success border-success/30 text-success',
@@ -79,12 +100,22 @@ export function Topbar({ onSearchClick }: TopbarProps) {
         {/* Profile Avatar / Tenant Indicator */}
         <div className="flex items-center gap-3 pl-3 border-l border-neutral-200">
           <div className="h-9 w-9 rounded-full bg-neutral-200 border border-neutral-300 flex items-center justify-center font-bold text-sm text-neutral-700">
-            JD
+            {initials || <UserCheck className="h-4 w-4" />}
           </div>
           <div className="hidden md:block text-left">
-            <div className="text-xs font-semibold text-neutral-900 leading-none">John Doe</div>
-            <div className="text-[10px] text-neutral-500 font-medium">Global Support Team</div>
+            <div className="text-xs font-semibold text-neutral-900 leading-none">{user?.displayName ?? 'Loading…'}</div>
+            <div className="text-[10px] text-neutral-500 font-medium">{tenant?.name ?? ''}</div>
           </div>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="p-1.5 rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none"
+            aria-label="Sign out"
+            title="Sign out"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </header>

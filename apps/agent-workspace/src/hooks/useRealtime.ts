@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useAuthStore } from '@easydev/stores';
 import { useRealtimeStore } from '../store/realtimeStore';
 import { useInboxStore } from '../store/inboxStore';
 import { useConversationStore } from '../store/conversationStore';
@@ -45,7 +46,9 @@ export function useRealtime(agentId?: string) {
     const socket = getSocket();
     socketRef.current = socket;
 
-    socket.auth = { agentId };
+    // The gateway authenticates the socket handshake the same way as REST calls -
+    // via the real bearer token, not the agentId alone (which is just routing info).
+    socket.auth = { agentId, token: useAuthStore.getState().tokens?.accessToken };
 
     if (!socket.connected) {
       socket.connect();
