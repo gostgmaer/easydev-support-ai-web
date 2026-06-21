@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useWidgetStore } from '../../../store/widgetStore';
 import { useConversationTimeline, useSendWidgetMessage } from '../../../hooks/useWidgetQueries';
 import { useWidgetRealtime } from '../../../hooks/useWidgetRealtime';
-import { WidgetChat, WidgetInput, Spinner } from '@easydev/ui';
+import { WidgetChat, WidgetInput, Spinner, ConnectionStatus } from '@easydev/ui';
+import { useRealtimeStore } from '@easydev/realtime';
 import { Sparkles, ArrowLeft, Bot } from 'lucide-react';
 
 export default function WidgetChatPage() {
@@ -27,6 +28,7 @@ export default function WidgetChatPage() {
   const { isLoading } = useConversationTimeline(activeConversationId);
   const { emitTyping } = useWidgetRealtime(activeConversationId);
   const sendMessageMutation = useSendWidgetMessage();
+  const connectionStatus = useRealtimeStore((state) => state.connectionStatus);
 
   const handleInputChange = (val: string) => {
     setComposerText(val);
@@ -114,6 +116,14 @@ export default function WidgetChatPage() {
           <span>Talk to Human</span>
         </button>
       </div>
+
+      {/* Connection state - hidden while healthy, visible the moment the
+          socket drops so the visitor isn't left wondering if a reply is coming. */}
+      {connectionStatus !== 'CONNECTED' && (
+        <div className="px-3 py-1 bg-neutral-50 border-b border-neutral-100 flex justify-center z-10 shrink-0">
+          <ConnectionStatus status={connectionStatus} />
+        </div>
+      )}
 
       {/* Timeline Scroll Area */}
       <div className="flex-1 overflow-y-auto min-h-0 bg-neutral-50/30">

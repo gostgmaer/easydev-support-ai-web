@@ -4,7 +4,7 @@ import { Search, LogOut } from 'lucide-react';
 import { useAuth } from '@easydev/auth';
 import { Avatar, ConnectionStatus, PresenceStatus } from '@easydev/ui';
 import type { PresenceStatus as PresenceStatusValue } from '@easydev/types';
-import { useRealtimeStore } from '../store/realtimeStore';
+import { useRealtimeStore } from '@easydev/realtime';
 import { useMyAgentProfile, useUpdatePresence } from '../hooks/useQueries';
 
 interface TopbarProps {

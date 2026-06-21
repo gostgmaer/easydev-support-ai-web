@@ -43,9 +43,6 @@
       ],
       "@easydev/charts/*": [
         "../../packages/charts/src/*"
-      ],
-      "@easydev/realtime/*": [
-        "../../packages/realtime/src/*"
       ]
     }
   },

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, CloudOff } from 'lucide-react';
 import type { ConnectionStatus as ConnectionStatusValue } from '@easydev/types';
 import { cn } from '../../utils';
 
@@ -8,6 +8,9 @@ const STATUS_CONFIG: Record<ConnectionStatusValue, { label: string; icon: React.
   CONNECTING: { label: 'Connecting…', icon: RefreshCw, className: 'text-info', spin: true },
   RECONNECTING: { label: 'Reconnecting…', icon: RefreshCw, className: 'text-warning', spin: true },
   DISCONNECTED: { label: 'Disconnected', icon: WifiOff, className: 'text-danger' },
+  // Distinct from DISCONNECTED: the OS reports no network at all, so reconnect
+  // attempts are paused rather than spinning indefinitely until it comes back.
+  OFFLINE: { label: 'Offline', icon: CloudOff, className: 'text-neutral-400' },
 };
 
 export interface ConnectionStatusProps {

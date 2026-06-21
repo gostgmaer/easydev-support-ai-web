@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build:packages": "pnpm --filter \"./packages/**\" --filter !./packages/charts --filter !./packages/forms --filter !./packages/hooks --filter !./packages/icons --filter !./packages/layouts --filter !./packages/realtime run build",
-    "typecheck:packages": "pnpm --filter \"./packages/**\" --filter !./packages/charts --filter !./packages/forms --filter !./packages/hooks --filter !./packages/icons --filter !./packages/layouts --filter !./packages/realtime run typecheck",
-    "test:packages": "pnpm --filter \"./packages/**\" --filter !./packages/charts --filter !./packages/forms --filter !./packages/hooks --filter !./packages/icons --filter !./packages/layouts --filter !./packages/realtime run test",
+    "build:packages": "pnpm --filter \"./packages/**\" --filter !./packages/charts --filter !./packages/forms --filter !./packages/icons --filter !./packages/layouts run build",
+    "typecheck:packages": "pnpm --filter \"./packages/**\" --filter !./packages/charts --filter !./packages/forms --filter !./packages/icons --filter !./packages/layouts run typecheck",
+    "test:packages": "pnpm --filter \"./packages/**\" --filter !./packages/charts --filter !./packages/forms --filter !./packages/icons --filter !./packages/layouts run test",
     "dev:admin-portal": "pnpm --filter @easydev/admin-portal dev",
     "dev:agent-workspace": "pnpm --filter agent-workspace dev",
     "dev:customer-widget": "pnpm --filter @easydev/customer-widget dev",

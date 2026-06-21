@@ -1,6 +1,15 @@
-import { create } from 'zustand';
-import type { ConnectionStatus } from '@easydev/types';
-import { PresenceUser } from '../types';
+import { create } from "zustand";
+import type { ConnectionStatus } from "@easydev/types";
+
+export type AgentStatus = "online" | "busy" | "offline";
+
+export interface PresenceUser {
+  id: string;
+  name: string;
+  avatar: string;
+  status: AgentStatus;
+  role: "agent" | "manager" | "admin";
+}
 
 interface RealtimeState {
   connected: boolean;
@@ -15,14 +24,12 @@ interface RealtimeState {
 
 export const useRealtimeStore = create<RealtimeState>((set) => ({
   connected: false,
-  connectionStatus: 'DISCONNECTED',
+  connectionStatus: "DISCONNECTED",
   agentPresence: {},
   setConnected: (connected) => set({ connected }),
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   updatePresence: (agentId, presence) =>
-    set((state) => ({
-      agentPresence: { ...state.agentPresence, [agentId]: presence },
-    })),
+    set((state) => ({ agentPresence: { ...state.agentPresence, [agentId]: presence } })),
   setPresenceList: (presenceList) => set({ agentPresence: presenceList }),
   removePresence: (agentId) =>
     set((state) => {

@@ -1,14 +1,7 @@
 import type { PresenceStatus as PresenceStatusValue } from '@easydev/types';
 
-export type AgentStatus = 'online' | 'busy' | 'offline';
-
-export interface PresenceUser {
-  id: string;
-  name: string;
-  avatar: string;
-  status: AgentStatus;
-  role: 'agent' | 'manager' | 'admin';
-}
+// PresenceUser/AgentStatus moved to @easydev/realtime/realtime-store - the
+// shared realtime store both agent-workspace and customer-widget now use.
 
 export type ConversationStatus = 'open' | 'snoozed' | 'resolved' | 'escalated';
 export type ConversationPriority = 'low' | 'medium' | 'high' | 'urgent';

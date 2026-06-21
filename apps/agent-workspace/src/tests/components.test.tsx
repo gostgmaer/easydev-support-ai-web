@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { Sidebar } from '../components/sidebar';
 import { Topbar } from '../components/topbar';
-import { useRealtimeStore } from '../store/realtimeStore';
+import { useRealtimeStore } from '@easydev/realtime';
 import { useNotificationStore } from '../store/notificationStore';
 
 // Mock NextJS navigation routers

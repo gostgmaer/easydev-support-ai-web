@@ -72,4 +72,4 @@ export interface RealtimeEventMap {
 
 export type RealtimeEventName = keyof RealtimeEventMap;
 
-export type ConnectionStatus = 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED';
+export type ConnectionStatus = 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED' | 'OFFLINE';

@@ -1,8 +1,7 @@
-import { useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@easydev/stores';
-import { useRealtimeStore } from '../store/realtimeStore';
+import { useSocketConnection, useRealtimeStore, PresenceUser } from '@easydev/realtime';
 import { useInboxStore } from '../store/inboxStore';
 import { useConversationStore } from '../store/conversationStore';
 import { useTicketStore } from '../store/ticketStore';
@@ -13,32 +12,10 @@ import {
   ConversationPriority,
   Ticket,
   TicketStatus,
-  PresenceUser,
   AiEscalation,
   AiSessionState,
   AiSessionStatus,
 } from '../types';
-
-let socketInstance: Socket | null = null;
-
-/**
- * The real gateway is InboxRealtimeService, mounted on the /v1/inbox/realtime
- * namespace (see Backend src/modules/inbox/services/inbox-realtime.service.ts).
- * It is NOT the bare root namespace.
- */
-export const getSocket = () => {
-  if (!socketInstance) {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000';
-    socketInstance = io(`${socketUrl}/v1/inbox/realtime`, {
-      autoConnect: false,
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      transports: ['websocket'],
-    });
-  }
-  return socketInstance;
-};
 
 /** Every broadcast event is wrapped this way by InboxRealtimeService.emitToTenant,
  * except the two client-fed events (inbox.typing / inbox.read-receipt) which are flat. */
@@ -147,10 +124,7 @@ function inboxViewToConversationPatch(view: InboxViewPayload): Partial<Conversat
 }
 
 export function useRealtime(agentId?: string) {
-  const socketRef = useRef<Socket | null>(null);
   const queryClient = useQueryClient();
-  const setConnected = useRealtimeStore((state) => state.setConnected);
-  const setConnectionStatus = useRealtimeStore((state) => state.setConnectionStatus);
   const updatePresence = useRealtimeStore((state) => state.updatePresence);
 
   const setTyping = useConversationStore((state) => state.setTyping);
@@ -162,41 +136,20 @@ export function useRealtime(agentId?: string) {
   const addAiEscalation = useAiStore((state) => state.addEscalation);
   const resolveAiEscalation = useAiStore((state) => state.resolveEscalation);
 
+  const token = useAuthStore((state) => state.tokens?.accessToken);
+  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000';
+
+  // The gateway authenticates the handshake via the real bearer token (see
+  // InboxRealtimeService.handleConnection) and derives tenant/user rooms from it -
+  // it does not use a client-claimed agentId for anything.
+  const { socket } = useSocketConnection({
+    url: agentId && token ? `${socketUrl}/v1/inbox/realtime` : null,
+    getAuth: () => ({ token }),
+    onReconnect: () => queryClient.invalidateQueries(),
+  });
+
   useEffect(() => {
-    if (!agentId) return;
-    const token = useAuthStore.getState().tokens?.accessToken;
-    if (!token) return;
-
-    const socket = getSocket();
-    socketRef.current = socket;
-
-    // The gateway authenticates the handshake via the real bearer token (see
-    // InboxRealtimeService.handleConnection) and derives tenant/user rooms from it -
-    // it does not use a client-claimed agentId for anything.
-    socket.auth = { token };
-
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    socket.on('connect', () => {
-      setConnected(true);
-      setConnectionStatus('CONNECTED');
-    });
-
-    socket.on('disconnect', () => {
-      setConnected(false);
-      setConnectionStatus('DISCONNECTED');
-    });
-
-    socket.io.on('reconnect_attempt', () => {
-      setConnectionStatus('RECONNECTING');
-    });
-
-    socket.io.on('reconnect', () => {
-      setConnectionStatus('CONNECTED');
-      queryClient.invalidateQueries();
-    });
+    if (!socket) return;
 
     socket.on(
       'inbox.conversation.updated',
@@ -350,10 +303,6 @@ export function useRealtime(agentId?: string) {
     });
 
     return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.io.off('reconnect_attempt');
-      socket.io.off('reconnect');
       socket.off('inbox.conversation.updated');
       socket.off('inbox.message.updated');
       socket.off('inbox.assignment.updated');
@@ -366,10 +315,8 @@ export function useRealtime(agentId?: string) {
       socket.off('workflow.execution.updated');
     };
   }, [
-    agentId,
+    socket,
     queryClient,
-    setConnected,
-    setConnectionStatus,
     updatePresence,
     setTyping,
     updateConversation,
@@ -381,11 +328,11 @@ export function useRealtime(agentId?: string) {
 
   // Emitters - match InboxRealtimeService's @SubscribeMessage handlers exactly.
   const emitTyping = (conversationId: string, isTyping: boolean) => {
-    socketRef.current?.emit('typing', { conversationId, isTyping });
+    socket?.emit('typing', { conversationId, isTyping });
   };
 
   const emitRead = (conversationId: string) => {
-    socketRef.current?.emit('read-receipt', { conversationId });
+    socket?.emit('read-receipt', { conversationId });
   };
 
   // The real gateway only has tenant-wide and user-wide rooms - there is no
@@ -394,7 +341,7 @@ export function useRealtime(agentId?: string) {
   const leaveConversation = (_conversationId: string) => {};
 
   return {
-    socket: socketRef.current,
+    socket,
     emitTyping,
     emitRead,
     joinConversation,

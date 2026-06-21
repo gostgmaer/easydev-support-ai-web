@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     '@easydev/analytics',
     '@easydev/ui',
     '@easydev/observability',
+    '@easydev/realtime',
   ],
   async headers() {
     return [

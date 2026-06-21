@@ -16,6 +16,7 @@
     "@easydev/feature-flags": "workspace:*",
     "@easydev/observability": "workspace:*",
     "@easydev/permissions": "workspace:*",
+    "@easydev/realtime": "workspace:*",
     "@easydev/stores": "workspace:*",
     "@easydev/types": "workspace:*",
     "@easydev/ui": "workspace:*",
