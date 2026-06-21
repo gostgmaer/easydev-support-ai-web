@@ -1,112 +1,215 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { useApiClient } from '@easydev/api-client';
 import { useSearchStore, HelpArticleSummary } from '../store/searchStore';
-import { useKnowledgeStore, HelpCategory, HelpCollection } from '../store/knowledgeStore';
+import { useKnowledgeStore, HelpCategory } from '../store/knowledgeStore';
 import { useArticleStore, DetailedArticle } from '../store/articleStore';
 import { useTicketStore, HelpTicketSummary } from '../store/ticketStore';
-import { useAIHelpStore, AIMessage } from '../store/aiHelpStore';
 
-const helpRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333/api';
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    ...options,
-  });
-  if (!response.ok) {
-    throw new Error(`Help Center API Error: ${response.statusText}`);
-  }
-  return response.json();
-};
+// Raw shapes returned by the backend's public knowledge/ticket endpoints
+// (src/modules/public-help on the backend) - these mirror the real
+// KnowledgeCategory/KnowledgeDocument/Ticket aggregates' toJSON() output.
+interface RawCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  parentCategoryId: string | null;
+  sortOrder: number;
+}
+
+interface RawDocument {
+  id: string;
+  categoryId: string | null;
+  title: string;
+  slug: string;
+  documentType: string;
+  status: string;
+  tags: string[] | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  content?: string;
+}
+
+interface RawSearchResult {
+  document: RawDocument;
+  score: number;
+}
+
+interface RawTicket {
+  id: string;
+  ticketNumber: string;
+  subject: string;
+  priority: string;
+  status: string;
+  createdAt: string;
+}
+
+function toCategory(raw: RawCategory): HelpCategory {
+  return {
+    id: raw.id,
+    name: raw.name,
+    description: raw.description ?? '',
+    parentCategoryId: raw.parentCategoryId,
+    sortOrder: raw.sortOrder,
+  };
+}
+
+function toSummary(raw: RawDocument, categories: HelpCategory[]): HelpArticleSummary {
+  return {
+    id: raw.id,
+    title: raw.title,
+    slug: raw.slug,
+    categoryId: raw.categoryId ?? undefined,
+    categoryName: categories.find((c) => c.id === raw.categoryId)?.name,
+    updatedAt: raw.updatedAt,
+    tags: raw.tags ?? undefined,
+  };
+}
+
+function computeReadingTime(content: string): number {
+  const words = content.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
 
 // 1. KNOWLEDGE BASE NAVIGATION
 export function useCategories() {
+  const apiClient = useApiClient();
   const setCategories = useKnowledgeStore((state) => state.setCategories);
   return useQuery<HelpCategory[]>({
     queryKey: ['help', 'categories'],
     queryFn: async () => {
-      const data = await helpRequest<HelpCategory[]>('/help/categories');
-      setCategories(data);
-      return data;
+      const raw = await apiClient.get<RawCategory[]>('/v1/public/knowledge/categories');
+      const categories = raw.map(toCategory);
+      setCategories(categories);
+      return categories;
     },
   });
 }
 
-export function useCollections(categoryId?: string) {
-  const setCollections = useKnowledgeStore((state) => state.setCollections);
-  return useQuery<HelpCollection[]>({
-    queryKey: ['help', 'collections', categoryId],
-    queryFn: async () => {
-      const path = categoryId ? `/help/collections?categoryId=${categoryId}` : '/help/collections';
-      const data = await helpRequest<HelpCollection[]>(path);
-      setCollections(data);
-      return data;
-    },
-  });
-}
-
-export function useCategoryArticles(categorySlug: string) {
+export function useCategoryArticles(categoryId: string) {
+  const apiClient = useApiClient();
+  const categories = useKnowledgeStore((state) => state.categories);
   return useQuery<HelpArticleSummary[]>({
-    queryKey: ['help', 'categories', categorySlug, 'articles'],
+    queryKey: ['help', 'categories', categoryId, 'articles'],
     queryFn: async () => {
-      return helpRequest<HelpArticleSummary[]>(`/help/categories/${categorySlug}/articles`);
+      const raw = await apiClient.get<RawDocument[]>('/v1/public/knowledge/documents', {
+        query: { categoryId },
+      });
+      return raw.map((d) => toSummary(d, categories));
     },
-    enabled: !!categorySlug,
+    enabled: !!categoryId,
   });
 }
 
-export function useCollectionArticles(collectionSlug: string) {
+// Real backend has no "featured/popular/trending" curation flag - this is
+// the most recently updated published articles, an honest stand-in.
+export function useRecentArticles(limit = 5) {
+  const apiClient = useApiClient();
+  const categories = useKnowledgeStore((state) => state.categories);
   return useQuery<HelpArticleSummary[]>({
-    queryKey: ['help', 'collections', collectionSlug, 'articles'],
+    queryKey: ['help', 'documents', 'recent'],
     queryFn: async () => {
-      return helpRequest<HelpArticleSummary[]>(`/help/collections/${collectionSlug}/articles`);
+      const raw = await apiClient.get<RawDocument[]>('/v1/public/knowledge/documents');
+      return raw
+        .map((d) => toSummary(d, categories))
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, limit);
     },
-    enabled: !!collectionSlug,
+  });
+}
+
+// FAQ is a real documentType in the backend (DocumentTypeEnum.FAQ) - each
+// FAQ document's title is the question and its content is the answer.
+export function useFaqArticles() {
+  const apiClient = useApiClient();
+  const categories = useKnowledgeStore((state) => state.categories);
+  return useQuery<HelpArticleSummary[]>({
+    queryKey: ['help', 'documents', 'faq'],
+    queryFn: async () => {
+      const raw = await apiClient.get<RawDocument[]>('/v1/public/knowledge/documents', {
+        query: { documentType: 'FAQ' },
+      });
+      return raw.map((d) => toSummary(d, categories));
+    },
   });
 }
 
 // 2. ARTICLE VIEWER
 export function useArticle(slug: string) {
+  const apiClient = useApiClient();
   const setCurrentArticle = useArticleStore((state) => state.setCurrentArticle);
+  const categories = useKnowledgeStore((state) => state.categories);
   return useQuery<DetailedArticle>({
     queryKey: ['help', 'articles', slug],
     queryFn: async () => {
-      const data = await helpRequest<DetailedArticle>(`/help/articles/${slug}`);
-      setCurrentArticle(data);
-      return data;
+      const raw = await apiClient.get<RawDocument & { content: string }>(
+        `/v1/public/knowledge/documents/${slug}`,
+      );
+      const article: DetailedArticle = {
+        id: raw.id,
+        title: raw.title,
+        slug: raw.slug,
+        content: raw.content,
+        categoryId: raw.categoryId ?? undefined,
+        categoryName: categories.find((c) => c.id === raw.categoryId)?.name,
+        updatedAt: raw.updatedAt,
+        tags: raw.tags ?? undefined,
+        readingTimeMin: computeReadingTime(raw.content),
+      };
+      setCurrentArticle(article);
+      return article;
     },
     enabled: !!slug,
   });
 }
 
-export function useRelatedArticles(slug: string) {
+// No "related articles" concept exists in the backend - other published
+// articles in the same category is an honest, real substitute.
+export function useRelatedArticles(slug: string, categoryId?: string) {
+  const apiClient = useApiClient();
   const setRelatedArticles = useArticleStore((state) => state.setRelatedArticles);
+  const categories = useKnowledgeStore((state) => state.categories);
   return useQuery<HelpArticleSummary[]>({
-    queryKey: ['help', 'articles', slug, 'related'],
+    queryKey: ['help', 'articles', slug, 'related', categoryId],
     queryFn: async () => {
-      const data = await helpRequest<HelpArticleSummary[]>(`/help/articles/${slug}/related`);
-      setRelatedArticles(data);
-      return data;
+      if (!categoryId) {
+        setRelatedArticles([]);
+        return [];
+      }
+      const raw = await apiClient.get<RawDocument[]>('/v1/public/knowledge/documents', {
+        query: { categoryId },
+      });
+      const related = raw
+        .filter((d) => d.slug !== slug)
+        .map((d) => toSummary(d, categories))
+        .slice(0, 5);
+      setRelatedArticles(related);
+      return related;
     },
-    enabled: !!slug,
+    enabled: !!categoryId,
   });
 }
 
 // 3. GLOBAL KNOWLEDGE SEARCH
-export function useArticleSearch(query: string, category?: string) {
+export function useArticleSearch(query: string, categoryId?: string) {
+  const apiClient = useApiClient();
   const setSearchResults = useSearchStore((state) => state.setSearchResults);
   const setSearching = useSearchStore((state) => state.setSearching);
+  const categories = useKnowledgeStore((state) => state.categories);
 
   return useQuery<HelpArticleSummary[]>({
-    queryKey: ['help', 'search', query, category],
+    queryKey: ['help', 'search', query, categoryId],
     queryFn: async () => {
       if (!query.trim()) return [];
       setSearching(true);
       try {
-        const catQuery = category ? `&category=${encodeURIComponent(category)}` : '';
-        const data = await helpRequest<HelpArticleSummary[]>(`/help/search?query=${encodeURIComponent(query)}${catQuery}`);
-        setSearchResults(data);
-        return data;
+        const raw = await apiClient.post<RawSearchResult[]>('/v1/public/knowledge/search', {
+          query,
+          categoryId,
+        });
+        const results = raw.map((r) => toSummary(r.document, categories));
+        setSearchResults(results);
+        return results;
       } finally {
         setSearching(false);
       }
@@ -115,30 +218,23 @@ export function useArticleSearch(query: string, category?: string) {
   });
 }
 
-// 4. ARTICLE FEEDBACK & RATINGS
-export function useSubmitArticleFeedback() {
-  return useMutation({
-    mutationFn: async (variables: { articleId: string; value: 'helpful' | 'not-helpful'; comment?: string }) => {
-      return helpRequest<{ success: boolean }>(`/help/articles/${variables.articleId}/feedback`, {
-        method: 'POST',
-        body: JSON.stringify({ value: variables.value, comment: variables.comment }),
-      });
-    },
-  });
-}
-
-// 5. TICKET SUBMISSION WITH AUTO DEFLECTION
+// 4. TICKET SUBMISSION WITH AUTO DEFLECTION
 export function useTicketDeflectionSuggestions() {
+  const apiClient = useApiClient();
   const setDeflectionArticles = useTicketStore((state) => state.setDeflectionArticles);
   const setDeflecting = useTicketStore((state) => state.setDeflecting);
+  const categories = useKnowledgeStore((state) => state.categories);
 
   return useMutation({
     mutationFn: async (subject: string) => {
       setDeflecting(true);
       try {
-        const data = await helpRequest<HelpArticleSummary[]>(`/help/tickets/deflect?subject=${encodeURIComponent(subject)}`);
-        setDeflectionArticles(data);
-        return data;
+        const raw = await apiClient.post<RawSearchResult[]>('/v1/public/knowledge/search', {
+          query: subject,
+        });
+        const results = raw.slice(0, 3).map((r) => toSummary(r.document, categories));
+        setDeflectionArticles(results);
+        return results;
       } finally {
         setDeflecting(false);
       }
@@ -146,8 +242,22 @@ export function useTicketDeflectionSuggestions() {
   });
 }
 
+const TICKET_PRIORITY_MAP: Record<string, string> = {
+  low: 'LOW',
+  normal: 'MEDIUM',
+  high: 'HIGH',
+  urgent: 'URGENT',
+};
+
+const TICKET_CATEGORY_LABELS: Record<string, string> = {
+  billing: 'Billing & Invoices',
+  shipping: 'Order Shipping',
+  returns: 'Refunds & Returns',
+  technical: 'Technical Bug',
+};
+
 export function useSubmitHelpTicket() {
-  const queryClient = useQueryClient();
+  const apiClient = useApiClient();
   const addTicketToHistory = useTicketStore((state) => state.addTicketToHistory);
 
   return useMutation({
@@ -157,93 +267,26 @@ export function useSubmitHelpTicket() {
       category: string;
       priority: string;
       email: string;
-      attachments?: { name: string; url: string; size: number }[];
+      name?: string;
     }) => {
-      return helpRequest<HelpTicketSummary>('/help/tickets', {
-        method: 'POST',
-        body: JSON.stringify(variables),
+      const categoryLabel = TICKET_CATEGORY_LABELS[variables.category] ?? variables.category;
+      return apiClient.post<RawTicket>('/v1/public/tickets', {
+        subject: variables.subject,
+        description: `[Category: ${categoryLabel}]\n\n${variables.description}`,
+        email: variables.email,
+        name: variables.name,
+        priority: TICKET_PRIORITY_MAP[variables.priority] ?? 'MEDIUM',
       });
     },
     onSuccess: (data) => {
-      addTicketToHistory(data);
-      queryClient.invalidateQueries({ queryKey: ['help', 'tickets'] });
-    },
-  });
-}
-
-// 6. ASK AI CHAT ASSISTANT
-export function useAskAIAssistant() {
-  const addAIMessage = useAIHelpStore((state) => state.addAIMessage);
-  const setAskingAI = useAIHelpStore((state) => state.setAskingAI);
-
-  return useMutation({
-    mutationFn: async (messageContent: string) => {
-      setAskingAI(true);
-      try {
-        return await helpRequest<{
-          content: string;
-          confidenceScore: number;
-          recommendedArticles?: HelpArticleSummary[];
-        }>('/help/ai/ask', {
-          method: 'POST',
-          body: JSON.stringify({ message: messageContent }),
-        });
-      } finally {
-        setAskingAI(false);
-      }
-    },
-    onSuccess: (data, messageContent) => {
-      // Add user message
-      addAIMessage({
-        id: `usr-${Date.now()}`,
-        sender: 'user',
-        content: messageContent,
-        createdAt: new Date().toISOString(),
+      addTicketToHistory({
+        id: data.id,
+        ticketNumber: data.ticketNumber,
+        subject: data.subject,
+        priority: data.priority,
+        status: data.status,
+        createdAt: data.createdAt,
       });
-      // Add assistant response
-      addAIMessage({
-        id: `ai-${Date.now()}`,
-        sender: 'assistant',
-        content: data.content,
-        confidenceScore: data.confidenceScore,
-        recommendedArticles: data.recommendedArticles,
-        createdAt: new Date().toISOString(),
-      });
-    },
-  });
-}
-
-// 7. STATUS & RELEASES
-export interface SystemStatus {
-  overallStatus: 'operational' | 'degraded' | 'maintenance' | 'outage';
-  incidentHistory: { id: string; title: string; status: string; date: string; updates: string[] }[];
-  maintenance: { id: string; title: string; scheduledFor: string; duration: string }[];
-  metrics: { name: string; uptime: number }[];
-}
-
-export function useSystemStatus() {
-  return useQuery<SystemStatus>({
-    queryKey: ['help', 'system-status'],
-    queryFn: async () => {
-      return helpRequest<SystemStatus>('/help/status');
-    },
-  });
-}
-
-export interface ReleaseNote {
-  id: string;
-  version: string;
-  date: string;
-  title: string;
-  description: string;
-  updates: { type: 'feature' | 'bugfix' | 'announcement'; content: string }[];
-}
-
-export function useReleaseNotes() {
-  return useQuery<ReleaseNote[]>({
-    queryKey: ['help', 'release-notes'],
-    queryFn: async () => {
-      return helpRequest<ReleaseNote[]>('/help/release-notes');
     },
   });
 }
