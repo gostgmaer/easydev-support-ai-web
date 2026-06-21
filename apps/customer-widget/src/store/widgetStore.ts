@@ -1,14 +1,6 @@
 import { create } from 'zustand';
 
 // 1. Core Widget Types
-export interface CustomerSession {
-  id?: string;
-  name?: string;
-  email?: string;
-  verified: boolean;
-  token?: string;
-}
-
 export interface WidgetConfig {
   primaryColor: string;
   welcomeMessage: string;
@@ -26,43 +18,42 @@ export interface WidgetMessage {
   attachments?: { name: string; url: string; size: number }[];
 }
 
-export interface HelpArticle {
-  id: string;
-  title: string;
-  content: string;
-  score?: number;
-}
-
-export interface TicketSummary {
-  id: string;
-  subject: string;
-  status: 'open' | 'pending' | 'solved' | 'closed';
-  createdAt: string;
+export interface WidgetCustomer {
+  email: string;
+  name?: string;
 }
 
 // 2. Zustand Store definition
 interface WidgetState {
   tenantId: string | null;
   config: WidgetConfig;
-  session: CustomerSession;
-  messages: WidgetMessage[];
-  articles: HelpArticle[];
-  tickets: TicketSummary[];
+
+  // Widget session: anonymous visitor identity + bearer token issued by
+  // POST /v1/widget/session/start, required for every widget REST/socket call.
+  anonymousId: string | null;
+  sessionToken: string | null;
+  visitorId: string | null;
+  widgetSessionId: string | null;
+
+  // The single support conversation tied to this widget session, once started
+  // via POST /v1/widget/conversations.
+  customer: WidgetCustomer | null;
   activeConversationId: string | null;
+  messages: WidgetMessage[];
   isAgentTyping: boolean;
   isWidgetOpen: boolean;
 
   // Actions
-  initializeWidget: (tenantId: string, customConfig?: Partial<WidgetConfig>) => void;
-  setSession: (session: CustomerSession) => void;
+  setTenantId: (tenantId: string | null) => void;
+  setConfig: (customConfig: Partial<WidgetConfig>) => void;
+  setAnonymousId: (anonymousId: string) => void;
+  setWidgetSession: (data: { token: string; visitorId: string; sessionId: string }) => void;
+  setCustomer: (customer: WidgetCustomer) => void;
   setMessages: (messages: WidgetMessage[]) => void;
   addMessage: (msg: WidgetMessage) => void;
-  setArticles: (articles: HelpArticle[]) => void;
-  setTickets: (tickets: TicketSummary[]) => void;
   setActiveConversationId: (id: string | null) => void;
   setAgentTyping: (typing: boolean) => void;
   setWidgetOpen: (open: boolean) => void;
-  clearSession: () => void;
 }
 
 export const useWidgetStore = create<WidgetState>((set) => ({
@@ -73,20 +64,23 @@ export const useWidgetStore = create<WidgetState>((set) => ({
     agentAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
     aiName: 'EasyDev Copilot',
   },
-  session: { verified: false },
-  messages: [],
-  articles: [],
-  tickets: [],
+  anonymousId: null,
+  sessionToken: null,
+  visitorId: null,
+  widgetSessionId: null,
+  customer: null,
   activeConversationId: null,
+  messages: [],
   isAgentTyping: false,
   isWidgetOpen: false,
 
-  initializeWidget: (tenantId, customConfig) =>
-    set((state) => ({
-      tenantId,
-      config: { ...state.config, ...customConfig },
-    })),
-  setSession: (session) => set({ session }),
+  setTenantId: (tenantId) => set({ tenantId }),
+  setConfig: (customConfig) =>
+    set((state) => ({ config: { ...state.config, ...customConfig } })),
+  setAnonymousId: (anonymousId) => set({ anonymousId }),
+  setWidgetSession: ({ token, visitorId, sessionId }) =>
+    set({ sessionToken: token, visitorId, widgetSessionId: sessionId }),
+  setCustomer: (customer) => set({ customer }),
   setMessages: (messages) => set({ messages }),
   addMessage: (msg) =>
     set((state) => {
@@ -94,10 +88,7 @@ export const useWidgetStore = create<WidgetState>((set) => ({
       if (state.messages.some((m) => m.id === msg.id)) return {};
       return { messages: [...state.messages, msg] };
     }),
-  setArticles: (articles) => set({ articles }),
-  setTickets: (tickets) => set({ tickets }),
   setActiveConversationId: (id) => set({ activeConversationId: id }),
   setAgentTyping: (isAgentTyping) => set({ isAgentTyping }),
   setWidgetOpen: (isWidgetOpen) => set({ isWidgetOpen }),
-  clearSession: () => set({ session: { verified: false }, messages: [], activeConversationId: null }),
 }));

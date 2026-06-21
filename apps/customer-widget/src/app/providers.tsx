@@ -7,6 +7,7 @@ import { FeatureFlagProvider } from '@easydev/feature-flags';
 import { AnalyticsProvider } from '@easydev/analytics';
 import { DesignSystemProvider } from '@easydev/design-system';
 import { ObservabilityProvider, useTelemetry, ErrorBoundary } from '@easydev/observability';
+import { useWidgetStore } from '../store/widgetStore';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333';
 
@@ -19,10 +20,12 @@ function TenantIdSync({
 }) {
   const searchParams = useSearchParams();
   const id = searchParams.get('tenantId');
+  const setTenantId = useWidgetStore((state) => state.setTenantId);
   React.useEffect(() => {
     tenantIdRef.current = id;
     onTenantId(id);
-  }, [id, tenantIdRef, onTenantId]);
+    setTenantId(id);
+  }, [id, tenantIdRef, onTenantId, setTenantId]);
   return null;
 }
 
@@ -38,7 +41,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const tenantIdRef = React.useRef<string | null>(null);
   const [tenantId, setTenantId] = React.useState<string | null>(null);
   const apiConfig = React.useMemo(
-    () => ({ baseUrl: API_BASE_URL, getTenantId: () => tenantIdRef.current }),
+    () => ({
+      baseUrl: API_BASE_URL,
+      getTenantId: () => tenantIdRef.current,
+      getAccessToken: () => useWidgetStore.getState().sessionToken,
+    }),
     [],
   );
 

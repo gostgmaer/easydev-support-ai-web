@@ -5,126 +5,53 @@ import { useRouter } from 'next/navigation';
 import { useWidgetStore } from '../../../store/widgetStore';
 import { useConversationTimeline, useSendWidgetMessage } from '../../../hooks/useWidgetQueries';
 import { useWidgetRealtime } from '../../../hooks/useWidgetRealtime';
-import { WidgetChat, WidgetInput, WidgetAttachmentUploader, Spinner } from '@easydev/ui';
-import { Sparkles, ArrowLeft, Mic, AlertCircle, Bot } from 'lucide-react';
-import type { AttachmentMeta } from '@easydev/ui';
+import { WidgetChat, WidgetInput, Spinner } from '@easydev/ui';
+import { Sparkles, ArrowLeft, Bot } from 'lucide-react';
 
 export default function WidgetChatPage() {
   const router = useRouter();
-  const session = useWidgetStore((state) => state.session);
   const messages = useWidgetStore((state) => state.messages);
   const activeConversationId = useWidgetStore((state) => state.activeConversationId);
   const isAgentTyping = useWidgetStore((state) => state.isAgentTyping);
   const config = useWidgetStore((state) => state.config);
 
   const [composerText, setComposerText] = React.useState('');
-  const [pendingAttachments, setPendingAttachments] = React.useState<AttachmentMeta[]>([]);
-  const [isUploading, setIsUploading] = React.useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  // Redirect if not verified/no session
+  // Redirect if there is no active conversation yet (pre-chat form not completed)
   React.useEffect(() => {
-    if (!session.verified) {
+    if (!activeConversationId) {
       router.push('/widget');
     }
-  }, [session.verified, router]);
+  }, [activeConversationId, router]);
 
-  // Hook into conversation sync & realtime events
   const { isLoading } = useConversationTimeline(activeConversationId);
   const { emitTyping } = useWidgetRealtime(activeConversationId);
   const sendMessageMutation = useSendWidgetMessage();
 
-  // Handle typing triggers
   const handleInputChange = (val: string) => {
     setComposerText(val);
     emitTyping(val.length > 0);
   };
 
-  // Handle sending
   const handleSendMessage = () => {
-    if (!activeConversationId || (!composerText.trim() && pendingAttachments.length === 0)) return;
-
-    const attachmentPayload = pendingAttachments.map(att => ({
-      name: att.name,
-      url: att.url,
-      size: att.sizeBytes,
-    }));
+    if (!activeConversationId || !composerText.trim()) return;
 
     sendMessageMutation.mutate(
-      {
-        conversationId: activeConversationId,
-        content: composerText,
-        attachments: attachmentPayload.length > 0 ? attachmentPayload : undefined,
-      },
+      { conversationId: activeConversationId, content: composerText },
       {
         onSuccess: () => {
           setComposerText('');
-          setPendingAttachments([]);
           emitTyping(false);
         },
-      }
+      },
     );
   };
 
-  // Handle file uploads
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    setIsUploading(true);
-    try {
-      const file = files[0];
-      const formData = new FormData();
-      formData.append('file', file);
-
-      // Perform a real post request to upload the attachment
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333/api';
-      const response = await fetch(`${baseUrl}/widget/attachments`, {
-        method: 'POST',
-        headers: {
-          'X-EasyDev-Tenant': useWidgetStore.getState().tenantId || '',
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('File upload failed');
-      }
-
-      const uploaded: AttachmentMeta = await response.json();
-      setPendingAttachments((prev) => [...prev, uploaded]);
-    } catch (err) {
-      // Fallback local asset definition to prevent application deadlock if network endpoint is unreachable
-      const fallbackFile = files[0];
-      const mockAttachment: AttachmentMeta = {
-        id: `local-${Date.now()}`,
-        name: fallbackFile.name,
-        mimeType: fallbackFile.type,
-        sizeBytes: fallbackFile.size,
-        url: URL.createObjectURL(fallbackFile),
-      };
-      setPendingAttachments((prev) => [...prev, mockAttachment]);
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  // Remove attachment
-  const handleRemoveAttachment = (id: string) => {
-    setPendingAttachments((prev) => prev.filter((item) => item.id !== id));
-  };
-
-  // AI Suggested followups selection
   const handleSuggestedQuestion = (question: string) => {
     if (!activeConversationId) return;
-    sendMessageMutation.mutate({
-      conversationId: activeConversationId,
-      content: question,
-    });
+    sendMessageMutation.mutate({ conversationId: activeConversationId, content: question });
   };
 
-  // Human handoff trigger
   const handleHumanEscalation = () => {
     if (!activeConversationId) return;
     sendMessageMutation.mutate({
@@ -133,17 +60,12 @@ export default function WidgetChatPage() {
     });
   };
 
-  // Map Zustand messages to WidgetChat format
   const mappedMessages = React.useMemo(() => {
     const senderTypeMap: Record<string, 'CUSTOMER' | 'AGENT' | 'AI' | 'SYSTEM'> = {
       customer: 'CUSTOMER',
       agent: 'AGENT',
       ai: 'AI',
       system: 'SYSTEM',
-      CUSTOMER: 'CUSTOMER',
-      AGENT: 'AGENT',
-      AI: 'AI',
-      SYSTEM: 'SYSTEM',
     };
 
     return messages.map((m) => ({
@@ -153,8 +75,8 @@ export default function WidgetChatPage() {
       senderName: m.senderName || (m.senderType === 'customer' ? 'You' : 'Assistant'),
       content: m.content,
       isInternalNote: false,
-      attachments: (m.attachments || []).map((att: any, idx: number) => ({
-        id: att.id || `att-${idx}`,
+      attachments: (m.attachments || []).map((att, idx: number) => ({
+        id: `att-${idx}`,
         name: att.name,
         mimeType: 'application/octet-stream',
         sizeBytes: att.size || 0,
@@ -165,7 +87,7 @@ export default function WidgetChatPage() {
     }));
   }, [messages, activeConversationId]);
 
-  if (isLoading) {
+  if (!activeConversationId || isLoading) {
     return (
       <div className="h-full flex items-center justify-center bg-neutral-50/50">
         <Spinner className="h-6 w-6 text-neutral-400" />
@@ -233,33 +155,12 @@ export default function WidgetChatPage() {
         </div>
       )}
 
-      {/* Attachment Upload List view */}
-      <WidgetAttachmentUploader
-        pendingAttachments={pendingAttachments}
-        onRemove={handleRemoveAttachment}
-        className="bg-white"
-      />
-
-      {/* Input composer with hidden input */}
+      {/* Input composer */}
       <div className="bg-white shrink-0 relative">
-        {isUploading && (
-          <div className="absolute inset-0 bg-white/70 flex items-center justify-center gap-2 z-20">
-            <Spinner className="h-3.5 w-3.5 text-neutral-500" />
-            <span className="text-[10px] text-neutral-500 font-medium">Uploading attachment...</span>
-          </div>
-        )}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          className="hidden"
-          accept="image/*,application/pdf,text/plain"
-        />
         <WidgetInput
           value={composerText}
           onValueChange={handleInputChange}
           onSend={handleSendMessage}
-          onAttach={() => fileInputRef.current?.click()}
           isSending={sendMessageMutation.isPending}
           placeholder="Ask a question or type a message..."
           className="border-t border-neutral-100"

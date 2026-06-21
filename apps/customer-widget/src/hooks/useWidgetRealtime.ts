@@ -1,88 +1,68 @@
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { useWidgetStore, WidgetMessage } from '../store/widgetStore';
+import { useWidgetStore } from '../store/widgetStore';
+import { toWidgetMessage, RawMessage } from './useWidgetQueries';
 
 let widgetSocketInstance: Socket | null = null;
+let widgetSocketKey: string | null = null;
 
-export const getWidgetSocket = () => {
-  if (!widgetSocketInstance) {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000';
-    widgetSocketInstance = io(socketUrl, {
-      autoConnect: false,
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      transports: ['websocket'],
-    });
+/** Connects to the real WidgetRealtimeGateway (`/v1/widget-chat`), authenticated with the
+ * same session token issued by POST /v1/widget/session/start. tenantId travels via the
+ * `query` param (not a header) since browsers can't set custom headers on a websocket
+ * upgrade - the gateway's handleConnection() already falls back to handshake.query.tenantId. */
+function getWidgetSocket(token: string, tenantId: string): Socket {
+  const key = `${tenantId}:${token}`;
+  if (widgetSocketInstance && widgetSocketKey === key) {
+    return widgetSocketInstance;
   }
+  if (widgetSocketInstance) {
+    widgetSocketInstance.disconnect();
+  }
+  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3333';
+  widgetSocketInstance = io(`${socketUrl}/v1/widget-chat`, {
+    auth: { token },
+    query: { tenantId },
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    transports: ['websocket'],
+  });
+  widgetSocketKey = key;
   return widgetSocketInstance;
-};
+}
 
 export function useWidgetRealtime(conversationId: string | null) {
   const socketRef = useRef<Socket | null>(null);
   const addMessage = useWidgetStore((state) => state.addMessage);
-  const setAgentTyping = useWidgetStore((state) => state.setAgentTyping);
+  const sessionToken = useWidgetStore((state) => state.sessionToken);
+  const tenantId = useWidgetStore((state) => state.tenantId);
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!sessionToken || !tenantId) return;
 
-    const socket = getWidgetSocket();
+    const socket = getWidgetSocket(sessionToken, tenantId);
     socketRef.current = socket;
 
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    // Join room for this conversation
-    socket.emit('join:conversation', { conversationId });
-
-    socket.on('message:new', (data: { conversationId: string; message: WidgetMessage }) => {
-      if (data.conversationId === conversationId) {
-        addMessage(data.message);
-        
-        // Emit read receipt instantly
-        socket.emit('receipt:read', { conversationId, messageId: data.message.id });
+    const handleNewMessage = (raw: RawMessage) => {
+      addMessage(toWidgetMessage(raw));
+      if (conversationId) {
+        socket.emit('read_receipt', { messageId: raw.id, conversationId });
       }
-    });
+    };
 
-    socket.on('typing:status', (data: { conversationId: string; userId: string; isTyping: boolean; name: string }) => {
-      if (data.conversationId === conversationId && data.name !== 'You') {
-        setAgentTyping(data.isTyping);
-      }
-    });
-
-    socket.on('agent:joined', (data: { name: string }) => {
-      addMessage({
-        id: `sys-${Date.now()}`,
-        senderType: 'system',
-        senderName: 'System',
-        content: `Agent ${data.name} has joined the conversation.`,
-        createdAt: new Date().toISOString(),
-      });
-    });
-
-    socket.on('agent:left', (data: { name: string }) => {
-      addMessage({
-        id: `sys-${Date.now()}`,
-        senderType: 'system',
-        senderName: 'System',
-        content: `Agent ${data.name} has left the conversation.`,
-        createdAt: new Date().toISOString(),
-      });
-    });
+    socket.on('newMessage', handleNewMessage);
 
     return () => {
-      socket.emit('leave:conversation', { conversationId });
-      socket.off('message:new');
-      socket.off('typing:status');
-      socket.off('agent:joined');
-      socket.off('agent:left');
+      socket.off('newMessage', handleNewMessage);
     };
-  }, [conversationId, addMessage, setAgentTyping]);
+  }, [sessionToken, tenantId, conversationId, addMessage]);
 
+  // Lets agents see that the visitor is typing - the gateway relays this to the
+  // tenant's agent room. There is no corresponding "agent is typing" broadcast back
+  // to the widget, so this hook intentionally only emits and never sets local state.
   const emitTyping = (isTyping: boolean) => {
     if (conversationId) {
-      socketRef.current?.emit('typing:status', { conversationId, isTyping });
+      socketRef.current?.emit('typing', { isTyping, conversationId });
     }
   };
 

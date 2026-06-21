@@ -3,13 +3,16 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { MessageCircle, FileQuestion, StickyNote, History, User } from 'lucide-react';
+import { MessageCircle, FileQuestion, StickyNote, History } from 'lucide-react';
 import { useWidgetStore } from '../../store/widgetStore';
+import { useEnsureWidgetSession } from '../../hooks/useWidgetQueries';
 
 export default function WidgetWindowLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const config = useWidgetStore((state) => state.config);
-  const activeConversationId = useWidgetStore((state) => state.activeConversationId);
+  // Bootstraps the anonymous visitor's session token once tenantId is known
+  // (set by Providers' TenantIdSync) - every widget API/socket call needs it.
+  useEnsureWidgetSession();
 
   const navItems = [
     { label: 'Home', href: '/widget', icon: MessageCircle },

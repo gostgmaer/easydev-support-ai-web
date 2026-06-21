@@ -1,206 +1,197 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useWidgetStore, WidgetMessage, HelpArticle, TicketSummary, CustomerSession } from '../store/widgetStore';
+import { useApiClient } from '@easydev/api-client';
+import { useWidgetStore, WidgetMessage } from '../store/widgetStore';
 
-const widgetRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333/api';
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      'X-EasyDev-Tenant': useWidgetStore.getState().tenantId || '',
-    },
-    ...options,
-  });
-  if (!response.ok) {
-    throw new Error(`Widget API Error: ${response.statusText}`);
+const ANONYMOUS_ID_KEY = 'easydev-widget-anonymous-id';
+
+function getOrCreateAnonymousId(): string {
+  if (typeof window === 'undefined') return '';
+  let id = window.localStorage.getItem(ANONYMOUS_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    window.localStorage.setItem(ANONYMOUS_ID_KEY, id);
   }
-  return response.json();
+  return id;
+}
+
+const SENDER_TYPE_MAP: Record<string, WidgetMessage['senderType']> = {
+  CUSTOMER: 'customer',
+  AGENT: 'agent',
+  AI: 'ai',
+  BOT: 'ai',
+  SYSTEM: 'system',
 };
 
-// 1. MESSAGES & TIMELINE
+export interface RawMessageAttachment {
+  fileName: string;
+  publicUrl?: string;
+  fileSize?: number;
+}
+
+export interface RawMessage {
+  id: string;
+  senderType: string;
+  content?: string;
+  createdAt: string;
+  attachments?: RawMessageAttachment[];
+}
+
+export function toWidgetMessage(raw: RawMessage): WidgetMessage {
+  const senderType = SENDER_TYPE_MAP[raw.senderType] || 'agent';
+  return {
+    id: raw.id,
+    senderType,
+    senderName: senderType === 'customer' ? 'You' : senderType === 'ai' ? 'AI Copilot' : senderType === 'system' ? 'System' : 'Support',
+    content: raw.content || '',
+    createdAt: raw.createdAt,
+    attachments: (raw.attachments || []).map((a) => ({
+      name: a.fileName,
+      url: a.publicUrl || '',
+      size: a.fileSize || 0,
+    })),
+  };
+}
+
+// 1. WIDGET SESSION
+// Establishes the anonymous-visitor identity + bearer token (POST /v1/widget/session/start)
+// that every other widget call authenticates with. Must resolve before any conversation call.
+interface StartSessionResponse {
+  session: { id: string; visitorId: string };
+  token: string;
+}
+
+export function useEnsureWidgetSession() {
+  const apiClient = useApiClient();
+  const tenantId = useWidgetStore((state) => state.tenantId);
+  const sessionToken = useWidgetStore((state) => state.sessionToken);
+  const setAnonymousId = useWidgetStore((state) => state.setAnonymousId);
+  const setWidgetSession = useWidgetStore((state) => state.setWidgetSession);
+
+  return useQuery({
+    queryKey: ['widget', 'session', tenantId],
+    queryFn: async () => {
+      const anonymousId = getOrCreateAnonymousId();
+      setAnonymousId(anonymousId);
+      const result = await apiClient.post<StartSessionResponse>(
+        '/v1/widget/session/start',
+        {
+          anonymousId,
+          userAgent: navigator.userAgent,
+          landingPage: window.location.href,
+          referrer: document.referrer || undefined,
+        },
+        { skipAuth: true },
+      );
+      setWidgetSession({
+        token: result.token,
+        visitorId: result.session.visitorId,
+        sessionId: result.session.id,
+      });
+      return result;
+    },
+    enabled: !!tenantId && !sessionToken,
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
+
+// 2. CONVERSATION LIFECYCLE
+interface WidgetConversationResponse {
+  id: string;
+}
+
+/** Probes for (and resumes into) the session's existing conversation, if any.
+ * Errors when none exists yet - that's the signal to show the pre-chat form. */
+export function useResumeWidgetConversation() {
+  const apiClient = useApiClient();
+  const sessionToken = useWidgetStore((state) => state.sessionToken);
+  const setActiveConversationId = useWidgetStore((state) => state.setActiveConversationId);
+
+  return useQuery({
+    queryKey: ['widget', 'conversation'],
+    queryFn: async () => {
+      const conversation = await apiClient.post<WidgetConversationResponse>(
+        '/v1/widget/conversations',
+        {},
+      );
+      setActiveConversationId(conversation.id);
+      return conversation;
+    },
+    enabled: !!sessionToken,
+    retry: false,
+    staleTime: Infinity,
+  });
+}
+
+export function useStartWidgetConversation() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  const setActiveConversationId = useWidgetStore((state) => state.setActiveConversationId);
+  const setCustomer = useWidgetStore((state) => state.setCustomer);
+
+  return useMutation({
+    mutationFn: async (variables: { email: string; name?: string; subject?: string }) => {
+      return apiClient.post<WidgetConversationResponse>('/v1/widget/conversations', variables);
+    },
+    onSuccess: (data, variables) => {
+      setActiveConversationId(data.id);
+      setCustomer({ email: variables.email, name: variables.name });
+      queryClient.setQueryData(['widget', 'conversation'], data);
+    },
+  });
+}
+
+// 3. MESSAGES & TIMELINE
+interface MessagesPage {
+  data: RawMessage[];
+  total: number;
+}
+
 export function useConversationTimeline(conversationId: string | null) {
+  const apiClient = useApiClient();
   const setMessages = useWidgetStore((state) => state.setMessages);
   return useQuery<WidgetMessage[]>({
     queryKey: ['widget', 'messages', conversationId],
     queryFn: async () => {
       if (!conversationId) return [];
-      const data = await widgetRequest<WidgetMessage[]>(`/widget/conversations/${conversationId}/messages`);
-      setMessages(data);
-      return data;
+      const page = await apiClient.get<MessagesPage>(
+        `/v1/widget/conversations/${conversationId}/messages`,
+        { query: { sortOrder: 'ASC', limit: 100 } },
+      );
+      const mapped = page.data.map(toWidgetMessage);
+      setMessages(mapped);
+      return mapped;
     },
     enabled: !!conversationId,
   });
 }
 
 export function useSendWidgetMessage() {
+  const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const addMessage = useWidgetStore((state) => state.addMessage);
 
   return useMutation({
-    mutationFn: async ({ conversationId, content, attachments }: { conversationId: string; content: string; attachments?: WidgetMessage['attachments'] }) => {
-      return widgetRequest<WidgetMessage>(`/widget/conversations/${conversationId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ content, attachments }),
-      });
+    mutationFn: async ({ conversationId, content }: { conversationId: string; content: string }) => {
+      const raw = await apiClient.post<RawMessage>(
+        `/v1/widget/conversations/${conversationId}/messages`,
+        { content },
+      );
+      return toWidgetMessage(raw);
     },
-    onMutate: async (variables) => {
-      await queryClient.cancelQueries({ queryKey: ['widget', 'messages', variables.conversationId] });
-      
+    onMutate: async (variables: { conversationId: string; content: string }) => {
       const tempMessage: WidgetMessage = {
         id: `temp-${Date.now()}`,
         senderType: 'customer',
         senderName: 'You',
         content: variables.content,
         createdAt: new Date().toISOString(),
-        attachments: variables.attachments,
       };
-
       addMessage(tempMessage);
       return { tempMessage };
     },
-    onSuccess: (data, variables) => {
-      queryClient.setQueryData(
-        ['widget', 'messages', variables.conversationId],
-        (old: WidgetMessage[] | undefined) => {
-          const list = old ? [...old] : [];
-          return list.map((m) => (m.id.startsWith('temp-') ? data : m));
-        }
-      );
-    },
-    onSettled: (data, error, variables) => {
+    onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['widget', 'messages', variables.conversationId] });
-    },
-  });
-}
-
-// 2. KNOWLEDGE BASE SEARCH
-export function useKnowledgeArticles(query: string) {
-  const setArticles = useWidgetStore((state) => state.setArticles);
-  return useQuery<HelpArticle[]>({
-    queryKey: ['widget', 'articles', query],
-    queryFn: async () => {
-      if (!query.trim()) return [];
-      const data = await widgetRequest<HelpArticle[]>(`/widget/knowledge?query=${encodeURIComponent(query)}`);
-      setArticles(data);
-      return data;
-    },
-    enabled: query.length > 1,
-  });
-}
-
-export function useSuggestedArticles() {
-  return useQuery<HelpArticle[]>({
-    queryKey: ['widget', 'articles', 'suggested'],
-    queryFn: async () => {
-      return widgetRequest<HelpArticle[]>('/widget/knowledge/suggested');
-    },
-  });
-}
-
-// 3. AUTHENTICATION & SESSION
-export function useRequestMagicLink() {
-  return useMutation({
-    mutationFn: async (email: string) => {
-      return widgetRequest<{ success: boolean }>('/widget/auth/magic-link', {
-        method: 'POST',
-        body: JSON.stringify({ email }),
-      });
-    },
-  });
-}
-
-export function useVerifyOtp() {
-  const setSession = useWidgetStore((state) => state.setSession);
-
-  return useMutation({
-    mutationFn: async ({ email, code }: { email: string; code: string }) => {
-      return widgetRequest<CustomerSession>('/widget/auth/verify-otp', {
-        method: 'POST',
-        body: JSON.stringify({ email, code }),
-      });
-    },
-    onSuccess: (data) => {
-      setSession(data);
-    },
-  });
-}
-
-// 4. ORDER LOOKUP
-export interface OrderLookupDetails {
-  id: string;
-  status: string;
-  eta: string;
-  trackingUrl?: string;
-  total: number;
-}
-
-export function useOrderLookup(orderId: string, email: string) {
-  return useQuery<OrderLookupDetails>({
-    queryKey: ['widget', 'order', orderId],
-    queryFn: async () => {
-      if (!orderId || !email) throw new Error('Order details missing');
-      return widgetRequest<OrderLookupDetails>(`/widget/orders/${orderId}?email=${encodeURIComponent(email)}`);
-    },
-    enabled: !!orderId && !!email,
-  });
-}
-
-// 5. TICKET MANAGEMENT
-export function useWidgetTickets() {
-  const setTickets = useWidgetStore((state) => state.setTickets);
-  return useQuery<TicketSummary[]>({
-    queryKey: ['widget', 'tickets'],
-    queryFn: async () => {
-      const data = await widgetRequest<TicketSummary[]>('/widget/tickets');
-      setTickets(data);
-      return data;
-    },
-  });
-}
-
-export function useCreateWidgetTicket() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (variables: { subject: string; description: string; email: string }) => {
-      return widgetRequest<TicketSummary>('/widget/tickets', {
-        method: 'POST',
-        body: JSON.stringify(variables),
-      });
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['widget', 'tickets'], (old: TicketSummary[] | undefined) => {
-        return old ? [data, ...old] : [data];
-      });
-    },
-  });
-}
-
-// 6. SURVEY FEEDBACK
-export function useSubmitFeedback() {
-  return useMutation({
-    mutationFn: async (variables: { rating: number; comment?: string; category: 'agent' | 'ai' }) => {
-      return widgetRequest<{ success: boolean }>('/widget/feedback', {
-        method: 'POST',
-        body: JSON.stringify(variables),
-      });
-    },
-  });
-}
-
-// 7. CONVERSATION HISTORY
-export interface ConversationItem {
-  id: string;
-  subject?: string;
-  status: string;
-  createdAt: string;
-  lastMessageText?: string;
-}
-
-export function useCustomerConversations() {
-  return useQuery<ConversationItem[]>({
-    queryKey: ['widget', 'conversations'],
-    queryFn: async () => {
-      return widgetRequest<ConversationItem[]>('/widget/conversations');
     },
   });
 }
