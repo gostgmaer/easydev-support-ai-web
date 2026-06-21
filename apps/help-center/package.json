@@ -15,6 +15,7 @@
     "@easydev/auth": "workspace:*",
     "@easydev/design-system": "workspace:*",
     "@easydev/feature-flags": "workspace:*",
+    "@easydev/observability": "workspace:*",
     "@easydev/permissions": "workspace:*",
     "@easydev/stores": "workspace:*",
     "@easydev/types": "workspace:*",

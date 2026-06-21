@@ -9,7 +9,8 @@ const nextConfig: NextConfig = {
     "@easydev/forms",
     "@easydev/layouts",
     "@easydev/charts",
-    "@easydev/realtime"
+    "@easydev/realtime",
+    "@easydev/observability"
   ]
 };
 

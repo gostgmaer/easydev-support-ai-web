@@ -14,6 +14,7 @@
     "@easydev/api-client": "workspace:*",
     "@easydev/design-system": "workspace:*",
     "@easydev/feature-flags": "workspace:*",
+    "@easydev/observability": "workspace:*",
     "@easydev/stores": "workspace:*",
     "@easydev/types": "workspace:*",
     "@easydev/ui": "workspace:*",

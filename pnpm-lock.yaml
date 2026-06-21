@@ -29,6 +29,9 @@ importers:
       '@easydev/feature-flags':
         specifier: workspace:*
         version: link:../../packages/feature-flags
+      '@easydev/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@easydev/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
@@ -108,6 +111,9 @@ importers:
       '@easydev/feature-flags':
         specifier: workspace:*
         version: link:../../packages/feature-flags
+      '@easydev/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@easydev/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
@@ -205,6 +211,9 @@ importers:
       '@easydev/feature-flags':
         specifier: workspace:*
         version: link:../../packages/feature-flags
+      '@easydev/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@easydev/stores':
         specifier: workspace:*
         version: link:../../packages/stores
@@ -278,6 +287,9 @@ importers:
       '@easydev/feature-flags':
         specifier: workspace:*
         version: link:../../packages/feature-flags
+      '@easydev/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@easydev/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
@@ -482,6 +494,43 @@ importers:
       '@types/react':
         specifier: ^19.0.1
         version: 19.0.1
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(jiti@1.21.7)(postcss@8.5.15)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/observability:
+    dependencies:
+      '@easydev/api-client':
+        specifier: workspace:*
+        version: link:../api-client
+      '@easydev/types':
+        specifier: workspace:*
+        version: link:../types
+      '@easydev/utils':
+        specifier: workspace:*
+        version: link:../utils
+      web-vitals:
+        specifier: ^4.2.4
+        version: 4.2.4
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.1
+        version: 19.0.1
+      '@types/react-dom':
+        specifier: ^19.0.1
+        version: 19.0.1
+      next:
+        specifier: 15.1.0
+        version: 15.1.0(@playwright/test@1.61.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+      react:
+        specifier: 19.0.0
+        version: 19.0.0
+      react-dom:
+        specifier: 19.0.0
+        version: 19.0.0(react@19.0.0)
       tsup:
         specifier: ^8.3.5
         version: 8.5.1(jiti@1.21.7)(postcss@8.5.15)(typescript@5.9.3)

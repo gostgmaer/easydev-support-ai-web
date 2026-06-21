@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
     '@easydev/ui',
     '@easydev/auth',
     '@easydev/permissions',
+    '@easydev/observability',
   ],
 };
 
