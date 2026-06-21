@@ -1,12 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAdminStore, Connector, KnowledgeDocument, WorkflowRule, IncidentAlert, SystemMetric } from '../store/adminStore';
+import { useAuthStore } from '@easydev/stores';
 
 const adminRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333/api';
+  const token = useAuthStore.getState().tokens?.accessToken;
   const response = await fetch(`${baseUrl}${path}`, {
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer mock-admin-token',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     },
     ...options,
   });
