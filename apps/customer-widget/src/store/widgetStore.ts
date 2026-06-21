@@ -4,7 +4,7 @@ import { create } from 'zustand';
 export interface WidgetConfig {
   primaryColor: string;
   welcomeMessage: string;
-  agentAvatar: string;
+  agentAvatar?: string;
   aiName: string;
   tenantLogo?: string;
 }
@@ -61,7 +61,6 @@ export const useWidgetStore = create<WidgetState>((set) => ({
   config: {
     primaryColor: '#3b82f6',
     welcomeMessage: 'Hello! How can we help you today?',
-    agentAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
     aiName: 'EasyDev Copilot',
   },
   anonymousId: null,

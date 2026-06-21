@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { MessageCircle, FileQuestion, StickyNote, History } from 'lucide-react';
+import { Avatar } from '@easydev/ui';
 import { useWidgetStore } from '../../store/widgetStore';
 import { useEnsureWidgetSession } from '../../hooks/useWidgetQueries';
 
@@ -46,10 +47,11 @@ export default function WidgetWindowLayout({ children }: { children: React.React
         className="px-5 py-4 text-white flex items-center justify-between shadow-sm z-10 flex-shrink-0"
       >
         <div className="flex items-center gap-3">
-          <img
+          <Avatar
             src={config.agentAvatar}
-            alt="Support Avatar"
-            className="h-9 w-9 rounded-full border-2 border-white/80 object-cover"
+            name={config.aiName}
+            size="sm"
+            className="border-2 border-white/80"
           />
           <div>
             <h2 className="text-xs font-bold leading-none">{config.aiName}</h2>

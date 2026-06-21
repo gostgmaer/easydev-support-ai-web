@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useApiClient } from '@easydev/api-client';
 import {
   useAdminStore,
   Connector,
@@ -9,38 +10,16 @@ import {
   Team,
   ApiKey,
 } from '../store/adminStore';
-import { useAuthStore, useTenantStore } from '@easydev/stores';
 import { useAuth } from '@easydev/auth';
-
-// Backend controllers mount directly at /v1/... with no /api prefix (confirmed
-// against main.ts - no setGlobalPrefix call), and every tenant-scoped route
-// requires an x-tenant-id header (TenantGuard rejects requests without one).
-const adminRequest = async <T>(path: string, options?: RequestInit): Promise<T> => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333';
-  const token = useAuthStore.getState().tokens?.accessToken;
-  const tenantId = useTenantStore.getState().current?.id;
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
-    },
-    ...options,
-  });
-  if (!response.ok) {
-    throw new Error(`Admin API Error: ${response.statusText}`);
-  }
-  if (response.status === 204) return undefined as T;
-  return response.json();
-};
 
 // 1. SYSTEM METRICS & DASHBOARD
 export function useDashboardMetrics() {
+  const apiClient = useApiClient();
   const setMetrics = useAdminStore((state) => state.setMetrics);
   return useQuery<SystemMetric>({
     queryKey: ['admin', 'metrics'],
     queryFn: async () => {
-      const data = await adminRequest<SystemMetric>('/admin/metrics');
+      const data = await apiClient.get<SystemMetric>('/admin/metrics');
       setMetrics(data);
       return data;
     },
@@ -50,11 +29,12 @@ export function useDashboardMetrics() {
 
 // 2. CONNECTORS
 export function useConnectorsList() {
+  const apiClient = useApiClient();
   const setConnectors = useAdminStore((state) => state.setConnectors);
   return useQuery<Connector[]>({
     queryKey: ['admin', 'connectors'],
     queryFn: async () => {
-      const data = await adminRequest<Connector[]>('/admin/connectors');
+      const data = await apiClient.get<Connector[]>('/admin/connectors');
       setConnectors(data);
       return data;
     },
@@ -62,15 +42,13 @@ export function useConnectorsList() {
 }
 
 export function useUpdateConnector() {
+  const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const updateStatus = useAdminStore((state) => state.updateConnectorStatus);
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: Connector['status'] }) => {
-      return adminRequest<Connector>(`/admin/connectors/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status }),
-      });
+      return apiClient.patch<Connector>(`/admin/connectors/${id}`, { status });
     },
     onMutate: async ({ id, status }) => {
       // Optimistic update
@@ -84,11 +62,12 @@ export function useUpdateConnector() {
 
 // 3. WORKFLOWS
 export function useWorkflowsList() {
+  const apiClient = useApiClient();
   const setWorkflows = useAdminStore((state) => state.setWorkflows);
   return useQuery<WorkflowRule[]>({
     queryKey: ['admin', 'workflows'],
     queryFn: async () => {
-      const data = await adminRequest<WorkflowRule[]>('/admin/workflows');
+      const data = await apiClient.get<WorkflowRule[]>('/admin/workflows');
       setWorkflows(data);
       return data;
     },
@@ -96,14 +75,13 @@ export function useWorkflowsList() {
 }
 
 export function useToggleWorkflow() {
+  const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const toggle = useAdminStore((state) => state.toggleWorkflowStatus);
 
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
-      return adminRequest<WorkflowRule>(`/admin/workflows/${id}/toggle`, {
-        method: 'POST',
-      });
+      return apiClient.post<WorkflowRule>(`/admin/workflows/${id}/toggle`);
     },
     onMutate: async ({ id }) => {
       toggle(id);
@@ -116,11 +94,12 @@ export function useToggleWorkflow() {
 
 // 4. KNOWLEDGE BASE
 export function useKnowledgeDocuments() {
+  const apiClient = useApiClient();
   const setDocuments = useAdminStore((state) => state.setDocuments);
   return useQuery<KnowledgeDocument[]>({
     queryKey: ['admin', 'documents'],
     queryFn: async () => {
-      const data = await adminRequest<KnowledgeDocument[]>('/admin/knowledge/documents');
+      const data = await apiClient.get<KnowledgeDocument[]>('/admin/knowledge/documents');
       setDocuments(data);
       return data;
     },
@@ -128,15 +107,13 @@ export function useKnowledgeDocuments() {
 }
 
 export function useImportKnowledge() {
+  const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const addDoc = useAdminStore((state) => state.addDocument);
 
   return useMutation({
     mutationFn: async (variables: { title: string; sourceType: KnowledgeDocument['sourceType']; fileUrl?: string; webUrl?: string }) => {
-      return adminRequest<KnowledgeDocument>('/admin/knowledge/import', {
-        method: 'POST',
-        body: JSON.stringify(variables),
-      });
+      return apiClient.post<KnowledgeDocument>('/admin/knowledge/import', variables);
     },
     onSuccess: (data) => {
       addDoc(data);
@@ -149,11 +126,12 @@ export function useImportKnowledge() {
 
 // 5. INCIDENTS & HEALTH
 export function useIncidentsAlerts() {
+  const apiClient = useApiClient();
   const setIncidents = useAdminStore((state) => state.setIncidents);
   return useQuery<IncidentAlert[]>({
     queryKey: ['admin', 'incidents'],
     queryFn: async () => {
-      const data = await adminRequest<IncidentAlert[]>('/admin/incidents');
+      const data = await apiClient.get<IncidentAlert[]>('/admin/incidents');
       setIncidents(data);
       return data;
     },
@@ -161,14 +139,13 @@ export function useIncidentsAlerts() {
 }
 
 export function useResolveIncident() {
+  const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const resolve = useAdminStore((state) => state.resolveIncident);
 
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
-      return adminRequest<IncidentAlert>(`/admin/incidents/${id}/resolve`, {
-        method: 'POST',
-      });
+      return apiClient.post<IncidentAlert>(`/admin/incidents/${id}/resolve`);
     },
     onMutate: async ({ id }) => {
       resolve(id);
@@ -181,11 +158,12 @@ export function useResolveIncident() {
 
 // 6. TEAMS
 export function useTeams() {
+  const apiClient = useApiClient();
   const setTeams = useAdminStore((state) => state.setTeams);
   return useQuery<Team[]>({
     queryKey: ['admin', 'teams'],
     queryFn: async () => {
-      const result = await adminRequest<{ data: Team[]; total: number }>('/v1/teams');
+      const result = await apiClient.get<{ data: Team[]; total: number }>('/v1/teams');
       setTeams(result.data);
       return result.data;
     },
@@ -193,15 +171,13 @@ export function useTeams() {
 }
 
 export function useCreateTeam() {
+  const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const addTeam = useAdminStore((state) => state.addTeam);
 
   return useMutation({
     mutationFn: async (variables: { name: string; description?: string; department?: string }) => {
-      return adminRequest<Team>('/v1/teams', {
-        method: 'POST',
-        body: JSON.stringify(variables),
-      });
+      return apiClient.post<Team>('/v1/teams', variables);
     },
     onSuccess: (data) => {
       addTeam(data);
@@ -215,11 +191,12 @@ export function useCreateTeam() {
 // Archiving is one-way in the domain (Team.archive() soft-deletes), unlike the
 // reversible active/inactive toggle this page used to fake.
 export function useArchiveTeam() {
+  const apiClient = useApiClient();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
-      await adminRequest<void>(`/v1/teams/${id}`, { method: 'DELETE' });
+      await apiClient.delete<void>(`/v1/teams/${id}`);
       return id;
     },
     onSettled: () => {
@@ -230,11 +207,12 @@ export function useArchiveTeam() {
 
 // 7. API KEYS
 export function useApiKeys() {
+  const apiClient = useApiClient();
   const setApiKeys = useAdminStore((state) => state.setApiKeys);
   return useQuery<ApiKey[]>({
     queryKey: ['admin', 'api-keys'],
     queryFn: async () => {
-      const result = await adminRequest<{ data: ApiKey[]; total: number }>('/v1/admin/api-keys');
+      const result = await apiClient.get<{ data: ApiKey[]; total: number }>('/v1/admin/api-keys');
       setApiKeys(result.data);
       return result.data;
     },
@@ -245,15 +223,13 @@ export function useApiKeys() {
 // kept out of the ApiKey type/store (which only ever holds keyPrefix) and
 // returned to the caller so the UI can show a one-time "copy now" reveal.
 export function useCreateApiKey() {
+  const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const addApiKey = useAdminStore((state) => state.addApiKey);
 
   return useMutation({
     mutationFn: async (variables: { name: string; scopes: string[]; expiresAt?: string }) => {
-      return adminRequest<ApiKey & { rawKey: string }>('/v1/admin/api-keys', {
-        method: 'POST',
-        body: JSON.stringify(variables),
-      });
+      return apiClient.post<ApiKey & { rawKey: string }>('/v1/admin/api-keys', variables);
     },
     onSuccess: (data) => {
       const { rawKey, ...apiKey } = data;
@@ -266,12 +242,13 @@ export function useCreateApiKey() {
 }
 
 export function useRevokeApiKey() {
+  const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const removeApiKey = useAdminStore((state) => state.removeApiKey);
 
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
-      return adminRequest<ApiKey>(`/v1/admin/api-keys/${id}`, { method: 'DELETE' });
+      return apiClient.delete<ApiKey>(`/v1/admin/api-keys/${id}`);
     },
     onMutate: async ({ id }) => {
       removeApiKey(id);
@@ -312,26 +289,29 @@ export interface ChannelMetricRow {
 }
 
 export function useAnalyticsDashboard(timeRange: string) {
+  const apiClient = useApiClient();
   return useQuery<DashboardMetrics>({
     queryKey: ['admin', 'analytics', 'dashboard', timeRange],
-    queryFn: () => adminRequest<DashboardMetrics>(`/v1/analytics/dashboard?timeRange=${encodeURIComponent(timeRange)}`),
+    queryFn: () => apiClient.get<DashboardMetrics>('/v1/analytics/dashboard', { query: { timeRange } }),
   });
 }
 
 export function useAnalyticsAiMetrics(timeRange: string) {
+  const apiClient = useApiClient();
   return useQuery<AiDashboardMetrics>({
     queryKey: ['admin', 'analytics', 'ai', timeRange],
-    queryFn: () => adminRequest<AiDashboardMetrics>(`/v1/analytics/dashboard/ai?timeRange=${encodeURIComponent(timeRange)}`),
+    queryFn: () => apiClient.get<AiDashboardMetrics>('/v1/analytics/dashboard/ai', { query: { timeRange } }),
   });
 }
 
 // Backend returns raw per-bucket rows for the whole range, not pre-aggregated
 // by channel - sum/average them client-side into one row per channel type.
 export function useAnalyticsChannelMetrics(timeRange: string) {
+  const apiClient = useApiClient();
   return useQuery<ChannelMetricRow[]>({
     queryKey: ['admin', 'analytics', 'channels', timeRange],
     queryFn: async () => {
-      const rows = await adminRequest<any[]>(`/v1/analytics/dashboard/channels?timeRange=${encodeURIComponent(timeRange)}`);
+      const rows = await apiClient.get<any[]>('/v1/analytics/dashboard/channels', { query: { timeRange } });
       const byChannel = new Map<string, ChannelMetricRow>();
       for (const row of rows) {
         const existing = byChannel.get(row.channelType) ?? {
@@ -355,25 +335,20 @@ export function useAnalyticsChannelMetrics(timeRange: string) {
 // for the current view, then queues an async email delivery to the requesting
 // admin, which is the one real, working path the backend supports today.
 export function useTriggerAnalyticsExport() {
+  const apiClient = useApiClient();
   const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (variables: { timeRange: string; format: 'CSV' | 'PDF' }) => {
-      const report = await adminRequest<{ id: string }>('/v1/analytics/reports', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: `Analytics export - ${variables.timeRange}`,
-          reportType: 'Overview',
-          timeRange: variables.timeRange,
-        }),
+      const report = await apiClient.post<{ id: string }>('/v1/analytics/reports', {
+        name: `Analytics export - ${variables.timeRange}`,
+        reportType: 'Overview',
+        timeRange: variables.timeRange,
       });
-      return adminRequest<{ success: boolean; message: string }>('/v1/analytics/exports/manual', {
-        method: 'POST',
-        body: JSON.stringify({
-          reportId: report.id,
-          format: variables.format,
-          recipients: user?.email ? [user.email] : [],
-        }),
+      return apiClient.post<{ success: boolean; message: string }>('/v1/analytics/exports/manual', {
+        reportId: report.id,
+        format: variables.format,
+        recipients: user?.email ? [user.email] : [],
       });
     },
   });
