@@ -351,6 +351,42 @@ export function useAssignConversation() {
   });
 }
 
+export function useResolveConversation() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const updateConversation = useInboxStore((state) => state.updateConversation);
+
+  return useMutation({
+    mutationFn: async ({ conversationId }: { conversationId: string }) => {
+      return api.post<Conversation>(`/v1/conversations/${conversationId}/resolve`);
+    },
+    onMutate: async ({ conversationId }) => {
+      updateConversation(conversationId, { status: 'resolved' });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['inbox'] });
+    },
+  });
+}
+
+export function useCloseConversation() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const updateConversation = useInboxStore((state) => state.updateConversation);
+
+  return useMutation({
+    mutationFn: async ({ conversationId, reason }: { conversationId: string; reason?: string }) => {
+      return api.post<Conversation>(`/v1/conversations/${conversationId}/close`, { reason });
+    },
+    onMutate: async ({ conversationId }) => {
+      updateConversation(conversationId, { status: 'resolved' });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['inbox'] });
+    },
+  });
+}
+
 export function useUpdateTicket() {
   const api = useApiClient();
   const queryClient = useQueryClient();

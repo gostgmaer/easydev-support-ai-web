@@ -84,8 +84,8 @@ function SearchResultsContent() {
             className="border border-neutral-200 rounded px-2 text-xs font-semibold bg-white text-neutral-700 focus:ring-1 focus:ring-primary-500"
           >
             <option value="">All Categories</option>
-            {categories?.map((cat: any) => (
-              <option key={cat.id} value={cat.slug}>
+            {categories?.map((cat) => (
+              <option key={cat.id} value={cat.id}>
                 {cat.name}
               </option>
             ))}
@@ -144,7 +144,7 @@ function SearchResultsContent() {
             </div>
           ) : (
             <div className="space-y-3">
-              {results.map((art: any) => (
+              {results.map((art) => (
                 <Link
                   key={art.slug}
                   href={`/articles/${art.slug}`}
@@ -158,9 +158,6 @@ function SearchResultsContent() {
                     <h3 className="font-extrabold text-neutral-800 text-xs group-hover:text-primary-600 transition truncate leading-snug">
                       {art.title}
                     </h3>
-                    <p className="text-neutral-400 text-[10px] truncate leading-normal">
-                      {art.excerpt}
-                    </p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-neutral-300 group-hover:text-neutral-500 transition shrink-0" />
                 </Link>

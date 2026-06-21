@@ -1,12 +1,19 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { ExternalLink, Plus, X } from 'lucide-react';
-import { ConversationHeader, Tabs, TabsList, TabsTrigger, TabsContent } from '@easydev/ui';
+import { CheckCircle2, ExternalLink, Plus, X, XCircle } from 'lucide-react';
+import { Button, ConversationHeader, Tabs, TabsList, TabsTrigger, TabsContent } from '@easydev/ui';
 import { FeatureFlagGate } from '@easydev/feature-flags';
 import { useInboxStore } from '../store/inboxStore';
-import { useAddConversationTag, useConversationTags, useRemoveConversationTag } from '../hooks/useQueries';
+import {
+  useAddConversationTag,
+  useCloseConversation,
+  useConversationTags,
+  useRemoveConversationTag,
+  useResolveConversation,
+} from '../hooks/useQueries';
 import { toConversationSummary } from '../lib/ui-adapters';
+import type { Conversation } from '../types';
 import { ConversationTimeline } from './conversation-timeline';
 import { MessageComposer } from './message-composer';
 import { CustomerPanel } from './customer-panel';
@@ -25,6 +32,46 @@ export interface ConversationDetailProps {
   /** Shows a "view full conversation" link back to the standalone route - only relevant
    * when this is rendered inside the inbox's detail pane, not on the standalone page itself. */
   showOpenLink?: boolean;
+}
+
+function ConversationActions({
+  conversationId,
+  status,
+}: {
+  conversationId: string;
+  status: Conversation['status'];
+}) {
+  const resolveConversation = useResolveConversation();
+  const closeConversation = useCloseConversation();
+
+  // The local status model collapses backend RESOLVED/CLOSED/ARCHIVED into a
+  // single 'resolved' bucket - once we're there, both actions are redundant.
+  if (status === 'resolved') return null;
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Button
+        type="button"
+        variant="outline"
+        size="xs"
+        leadingIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
+        isLoading={resolveConversation.isPending}
+        onClick={() => resolveConversation.mutate({ conversationId })}
+      >
+        Resolve
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        leadingIcon={<XCircle className="h-3.5 w-3.5" />}
+        isLoading={closeConversation.isPending}
+        onClick={() => closeConversation.mutate({ conversationId })}
+      >
+        Close
+      </Button>
+    </div>
+  );
 }
 
 function ConversationTags({ conversationId }: { conversationId: string }) {
@@ -87,6 +134,7 @@ export function ConversationDetail({ showOpenLink = false }: ConversationDetailP
         conversation={toConversationSummary(activeConversation)}
         actions={
           <>
+            <ConversationActions conversationId={activeConversationId} status={activeConversation.status} />
             <ConversationTags conversationId={activeConversationId} />
             {showOpenLink && (
               <Link

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '@easydev/api-client';
 import { useAiStore } from '../store/aiStore';
-import { AiEscalation, AiSessionState } from '../types';
+import { AiDraft, AiEscalation, AiSessionState } from '../types';
 
 export function useAiSession(conversationId: string | null) {
   const api = useApiClient();
@@ -61,6 +61,31 @@ export function useAiEscalations(status: 'pending' | 'resolved' = 'pending') {
   }, [query.data, setEscalations]);
 
   return query;
+}
+
+export function useGenerateAiDraft() {
+  const api = useApiClient();
+  const setDraft = useAiStore((state) => state.setDraft);
+
+  return useMutation({
+    mutationFn: async (conversationId: string) => {
+      const result = await api.post<{ content: string; confidence: number; cost: number }>(
+        `/v1/ai-sessions/conversation/${conversationId}/suggest`,
+      );
+      return { conversationId, result };
+    },
+    onSuccess: ({ conversationId, result }) => {
+      const draft: AiDraft = {
+        conversationId,
+        content: result.content,
+        confidence: result.confidence,
+        cost: result.cost,
+        workflowStatus: 'completed',
+        toolCalls: [],
+      };
+      setDraft(conversationId, draft);
+    },
+  });
 }
 
 export function useResolveEscalation() {

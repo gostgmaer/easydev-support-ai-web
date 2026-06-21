@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSubmitHelpTicket, useTicketDeflectionSuggestions } from '@/hooks/useHelpQueries';
 import { useTicketStore } from '@/store/ticketStore';
-import { ArrowLeft, CheckCircle, Sparkles, HelpCircle, FileText, Upload, X } from 'lucide-react';
-import { Spinner, Input, Textarea, Button, Badge } from '@easydev/ui';
+import { ArrowLeft, CheckCircle, Sparkles, HelpCircle, FileText } from 'lucide-react';
+import { Spinner, Input, Textarea, Button } from '@easydev/ui';
 
 export default function SubmitTicketPage() {
   const router = useRouter();
@@ -18,18 +18,13 @@ export default function SubmitTicketPage() {
   const [email, setEmail] = React.useState('');
   const [consent, setConsent] = React.useState(false);
 
-  // Attachments state
-  const [uploadedFiles, setUploadedFiles] = React.useState<{ name: string; url: string; size: number }[]>([]);
-  const [isUploading, setIsUploading] = React.useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  const [submittedTicket, setSubmittedTicket] = React.useState<any | null>(null);
+  const [submittedTicket, setSubmittedTicket] = React.useState<{ ticketNumber: string } | null>(null);
   const [deflectedCount, setDeflectedCount] = React.useState(0);
 
   // Zustand Store for ticket suggestions
-  const deflectionArticles = useTicketStore((state: any) => state.deflectionArticles);
-  const isDeflecting = useTicketStore((state: any) => state.isDeflecting);
-  const setDeflectionArticles = useTicketStore((state: any) => state.setDeflectionArticles);
+  const deflectionArticles = useTicketStore((state) => state.deflectionArticles);
+  const isDeflecting = useTicketStore((state) => state.isDeflecting);
+  const setDeflectionArticles = useTicketStore((state) => state.setDeflectionArticles);
 
   const deflectMutation = useTicketDeflectionSuggestions();
   const submitMutation = useSubmitHelpTicket();
@@ -48,30 +43,7 @@ export default function SubmitTicketPage() {
     return () => clearTimeout(delayDebounce);
   }, [subject, setDeflectionArticles]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    setIsUploading(true);
-    // Simulate minor upload delay
-    setTimeout(() => {
-      const newFiles = Array.from(files).map((f) => ({
-        name: f.name,
-        url: URL.createObjectURL(f),
-        size: f.size,
-      }));
-      setUploadedFiles((prev) => [...prev, ...newFiles]);
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }, 800);
-  };
-
-  const removeUploadedFile = (index: number) => {
-    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
   const handleDeflectionSolve = () => {
-    // Record analytics event
     setDeflectedCount((c) => c + 1);
     alert('Thank you! Glad we could help you resolve the query immediately.');
     router.push('/');
@@ -92,14 +64,12 @@ export default function SubmitTicketPage() {
         category,
         priority,
         email: email.trim(),
-        attachments: uploadedFiles.length > 0 ? uploadedFiles : undefined,
       },
       {
-        onSuccess: (data: any) => {
-          setSubmittedTicket(data);
+        onSuccess: (data) => {
+          setSubmittedTicket({ ticketNumber: data.ticketNumber });
           setSubject('');
           setDescription('');
-          setUploadedFiles([]);
         },
       }
     );
@@ -130,7 +100,7 @@ export default function SubmitTicketPage() {
           <div className="space-y-2">
             <h2 className="font-extrabold text-base text-neutral-900">Ticket Filed successfully!</h2>
             <p className="text-neutral-500 text-xs">
-              Your inquiry has been queued for routing as ticket <span className="font-bold">#{submittedTicket.id}</span>. We will follow up at <span className="font-semibold text-neutral-700">{email}</span>.
+              Your inquiry has been queued for routing as ticket <span className="font-bold">#{submittedTicket.ticketNumber}</span>. We will follow up at <span className="font-semibold text-neutral-700">{email}</span>.
             </p>
           </div>
           <div className="flex gap-3 justify-center pt-2">
@@ -222,58 +192,6 @@ export default function SubmitTicketPage() {
               />
             </div>
 
-            {/* File Upload zone */}
-            <div className="space-y-2">
-              <label className="font-bold text-neutral-600 block">Attachments (Optional)</label>
-              <div className="border border-dashed border-neutral-200 rounded-lg p-4 bg-neutral-50/50 flex flex-col items-center justify-center relative">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  multiple
-                  accept="image/*,application/pdf"
-                />
-                {isUploading ? (
-                  <div className="flex items-center gap-1.5 py-2">
-                    <Spinner className="h-4 w-4 text-neutral-500" />
-                    <span className="text-[10px] text-neutral-500 font-semibold">Uploading...</span>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center justify-center gap-1 hover:text-neutral-700 text-neutral-500 focus:outline-none"
-                  >
-                    <Upload className="h-5 w-5" />
-                    <span className="text-[10px] font-bold">Upload Files (Images or PDFs)</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Uploaded files list */}
-              {uploadedFiles.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {uploadedFiles.map((file, i) => (
-                    <span
-                      key={i}
-                      className="flex items-center gap-1 px-2.5 py-1 bg-neutral-100 rounded-full text-[10px] font-medium"
-                    >
-                      <span className="max-w-[120px] truncate">{file.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeUploadedFile(i)}
-                        className="text-neutral-400 hover:text-neutral-600"
-                        aria-label={`Remove ${file.name}`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* Consent check */}
             <div className="flex items-start gap-2.5 pt-2">
               <input
@@ -305,7 +223,7 @@ export default function SubmitTicketPage() {
                 <span>Instant FAQ Recommendations</span>
               </h3>
               <p className="text-neutral-400 text-[10px] leading-normal">
-                As you type your subject, our AI scans related tutorials. Review these first to solve your inquiry immediately:
+                As you type your subject, we search the knowledge base for related guides. Review these first to solve your inquiry immediately:
               </p>
 
               {isDeflecting ? (
@@ -320,7 +238,7 @@ export default function SubmitTicketPage() {
               ) : (
                 <div className="space-y-2.5">
                   <span className="font-bold text-[9px] uppercase tracking-wider text-neutral-400 block">Recommended Docs</span>
-                  {deflectionArticles.map((art: any) => (
+                  {deflectionArticles.map((art) => (
                     <div
                       key={art.slug}
                       className="p-3 border border-neutral-100 rounded-lg bg-neutral-50/50 hover:bg-neutral-50 transition space-y-2"
@@ -329,9 +247,6 @@ export default function SubmitTicketPage() {
                         <FileText className="h-3.5 w-3.5 text-neutral-400 shrink-0 mt-0.5" />
                         <span>{art.title}</span>
                       </h4>
-                      <p className="text-[10px] text-neutral-400 line-clamp-2 leading-relaxed">
-                        {art.excerpt}
-                      </p>
                       <div className="flex justify-between items-center pt-1 border-t border-neutral-200/40">
                         <Link
                           href={`/articles/${art.slug}`}

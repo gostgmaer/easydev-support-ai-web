@@ -12,7 +12,13 @@ import { Can } from '@easydev/permissions';
 import { useConversationStore } from '../store/conversationStore';
 import { useInboxStore } from '../store/inboxStore';
 import { useAiStore } from '../store/aiStore';
-import { useAiSession, useUpdateAiStatus, useAiEscalations, useResolveEscalation } from '../hooks/useAiQueries';
+import {
+  useAiSession,
+  useUpdateAiStatus,
+  useAiEscalations,
+  useResolveEscalation,
+  useGenerateAiDraft,
+} from '../hooks/useAiQueries';
 import { toAiApprovalRequest, toAiToolCall } from '../lib/ui-adapters';
 
 export function AiPanel() {
@@ -27,6 +33,7 @@ export function AiPanel() {
   const updateAiStatusMutation = useUpdateAiStatus();
   const { data: escalations = [] } = useAiEscalations('pending');
   const resolveEscalationMutation = useResolveEscalation();
+  const generateDraftMutation = useGenerateAiDraft();
 
   const [editingContent, setEditingContent] = useState<string | null>(null);
 
@@ -151,6 +158,15 @@ export function AiPanel() {
           <div className="py-6 text-center text-xs text-neutral-400">
             <Bot className="mx-auto mb-2 h-8 w-8 animate-bounce text-neutral-300" />
             <p>No draft suggestion available yet.</p>
+            <Can resource="ai_agent" action="manage">
+              <button
+                onClick={() => generateDraftMutation.mutate(activeConv.id)}
+                disabled={generateDraftMutation.isPending}
+                className="mt-3 rounded border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {generateDraftMutation.isPending ? 'Generating…' : 'Generate Suggestion'}
+              </button>
+            </Can>
           </div>
         )}
       </div>

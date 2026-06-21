@@ -61,7 +61,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
       <ApiProvider config={apiConfig}>
-        <TenantIdSync tenantIdRef={tenantIdRef} onTenantId={setTenantId} />
+        <React.Suspense fallback={null}>
+          <TenantIdSync tenantIdRef={tenantIdRef} onTenantId={setTenantId} />
+        </React.Suspense>
         <AuthProvider baseUrl={API_BASE_URL}>
           <ObservabilityProvider appName="help-center">
             <ObservabilityBridge>

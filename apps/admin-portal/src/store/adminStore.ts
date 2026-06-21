@@ -14,6 +14,7 @@ export interface Connector {
   id: string;
   name: string;
   connectorType: string;
+  authType: 'NONE' | 'API_KEY' | 'BEARER' | 'BASIC' | 'OAUTH2' | 'HMAC';
   status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'DISABLED' | 'ERROR';
   healthStatus: 'UNKNOWN' | 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY';
   lastError?: string;
@@ -30,6 +31,14 @@ export interface KnowledgeDocument {
 export interface KnowledgeCategory {
   id: string;
   name: string;
+  description?: string;
+}
+
+export interface KnowledgeSource {
+  id: string;
+  name: string;
+  sourceType: string;
+  uri?: string;
   description?: string;
 }
 
@@ -88,6 +97,7 @@ interface AdminState {
   metrics: SystemMetric;
   connectors: Connector[];
   documents: KnowledgeDocument[];
+  sources: KnowledgeSource[];
   workflows: WorkflowRule[];
   incidents: IncidentAlert[];
   teams: Team[];
@@ -102,6 +112,8 @@ interface AdminState {
   setDocuments: (docs: KnowledgeDocument[]) => void;
   addDocument: (doc: KnowledgeDocument) => void;
   removeDocument: (id: string) => void;
+  setSources: (sources: KnowledgeSource[]) => void;
+  addSource: (source: KnowledgeSource) => void;
   setWorkflows: (workflows: WorkflowRule[]) => void;
   toggleWorkflowStatus: (id: string) => void;
   setIncidents: (incidents: IncidentAlert[]) => void;
@@ -127,6 +139,7 @@ export const useAdminStore = create<AdminState>((set) => ({
   },
   connectors: [],
   documents: [],
+  sources: [],
   workflows: [],
   incidents: [],
   teams: [],
@@ -143,6 +156,8 @@ export const useAdminStore = create<AdminState>((set) => ({
   setDocuments: (documents) => set({ documents }),
   addDocument: (doc) => set((state) => ({ documents: [doc, ...state.documents] })),
   removeDocument: (id) => set((state) => ({ documents: state.documents.filter((d) => d.id !== id) })),
+  setSources: (sources) => set({ sources }),
+  addSource: (source) => set((state) => ({ sources: [source, ...state.sources] })),
   setWorkflows: (workflows) => set({ workflows }),
   toggleWorkflowStatus: (id) =>
     set((state) => ({

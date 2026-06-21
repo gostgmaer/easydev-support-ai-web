@@ -232,3 +232,30 @@ export function useSendWidgetMessage() {
     },
   });
 }
+
+// 4. TICKET CREATION (Flow 2)
+export type WidgetTicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
+
+interface CreateTicketResponse {
+  status: string;
+  conversationId: string;
+}
+
+export function useCreateWidgetTicket() {
+  const apiClient = useApiClient();
+
+  return useMutation({
+    mutationFn: async (variables: {
+      conversationId: string;
+      subject: string;
+      description?: string;
+      priority?: WidgetTicketPriority;
+    }) => {
+      const { conversationId, ...body } = variables;
+      return apiClient.post<CreateTicketResponse>(
+        `/v1/widget/conversations/${conversationId}/ticket`,
+        body,
+      );
+    },
+  });
+}

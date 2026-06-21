@@ -5,6 +5,7 @@ import {
   Connector,
   KnowledgeDocument,
   KnowledgeCategory,
+  KnowledgeSource,
   WorkflowRule,
   IncidentAlert,
   Team,
@@ -121,6 +122,70 @@ export function useSetConnectorStatus() {
   });
 }
 
+export interface InstallConnectorPayload {
+  name: string;
+  slug: string;
+  connectorType: string;
+  authType: string;
+  description?: string;
+  baseUrl?: string;
+}
+
+export function useInstallConnector() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: InstallConnectorPayload) => {
+      return apiClient.post<Connector>('/v1/connectors/install', payload);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'connectors'] });
+    },
+  });
+}
+
+export function useConfigureConnectorApiKey() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, apiKey, headerName }: { id: string; apiKey: string; headerName: string }) => {
+      return apiClient.post<{ status: string; credentialId: string }>(`/v1/connectors/${id}/apikey`, {
+        apiKey,
+        headerName,
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'connectors'] });
+    },
+  });
+}
+
+export function useConfigureConnectorOAuth() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...dto
+    }: {
+      id: string;
+      clientId: string;
+      clientSecret: string;
+      tokenUrl: string;
+      authUrl?: string;
+      scopes?: string[];
+    }) => {
+      return apiClient.post<{ status: string; credentialId: string }>(`/v1/connectors/${id}/oauth`, dto);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'connectors'] });
+    },
+  });
+}
+
 // 3. WORKFLOWS
 // "Workflows" in the admin UI maps to the real WorkflowTemplate aggregate
 // (v1/workflows/templates) - there's no separate "workflows" list endpoint;
@@ -182,9 +247,63 @@ export function useKnowledgeDocuments() {
   });
 }
 
-// Creating a document requires a pre-existing knowledge source (sourceId) -
-// source management (v1/knowledge-sources) isn't wired into this UI yet, so
-// there's no useImportKnowledge mutation here until that prerequisite exists.
+export function useKnowledgeSources() {
+  const apiClient = useApiClient();
+  const setSources = useAdminStore((state) => state.setSources);
+  return useQuery<KnowledgeSource[]>({
+    queryKey: ['admin', 'knowledge-sources'],
+    queryFn: async () => {
+      const result = await apiClient.get<{ data: KnowledgeSource[]; total: number }>('/v1/knowledge-sources');
+      setSources(result.data);
+      return result.data;
+    },
+  });
+}
+
+export function useCreateKnowledgeSource() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  const addSource = useAdminStore((state) => state.addSource);
+
+  return useMutation({
+    mutationFn: async (variables: { name: string; sourceType: string; uri?: string; description?: string }) => {
+      return apiClient.post<KnowledgeSource>('/v1/knowledge-sources', variables);
+    },
+    onSuccess: (data) => {
+      addSource(data);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'knowledge-sources'] });
+    },
+  });
+}
+
+export function useCreateKnowledgeDocument() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  const addDocument = useAdminStore((state) => state.addDocument);
+
+  return useMutation({
+    mutationFn: async (variables: {
+      sourceId: string;
+      categoryId?: string;
+      title: string;
+      slug: string;
+      documentType: string;
+      language: string;
+      fileUrl?: string;
+      tags?: string[];
+    }) => {
+      return apiClient.post<KnowledgeDocument>('/v1/knowledge-documents', variables);
+    },
+    onSuccess: (data) => {
+      addDocument(data);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'documents'] });
+    },
+  });
+}
 
 export function useDeleteKnowledgeDocument() {
   const apiClient = useApiClient();
