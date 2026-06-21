@@ -7,4 +7,7 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   external: ['react', 'react-dom', 'tailwindcss'],
+  banner: {
+    js: "'use client';",
+  },
 });
