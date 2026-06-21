@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     '@easydev/api-client',
     '@easydev/stores',
     '@easydev/analytics',
+    '@easydev/ui',
   ],
   async headers() {
     return [
