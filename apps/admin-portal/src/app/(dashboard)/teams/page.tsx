@@ -1,28 +1,39 @@
 'use client';
 
 import * as React from 'react';
-import { Users, UserPlus, Settings, CheckCircle2, XCircle } from 'lucide-react';
-
-interface SupportTeam {
-  id: string;
-  name: string;
-  membersCount: number;
-  capacityRule: string; // e.g. "Max 5 active tickets per agent"
-  assignmentRule: 'round-robin' | 'least-busy' | 'skills-based';
-  status: 'active' | 'inactive';
-}
+import { Users, UserPlus, Archive } from 'lucide-react';
+import { useTeams, useCreateTeam, useArchiveTeam } from '../../../hooks/useAdminQueries';
 
 export default function TeamsPage() {
-  const [teams, setTeams] = React.useState<SupportTeam[]>([
-    { id: 'team-1', name: 'Billing & Payments', membersCount: 6, capacityRule: 'Max 3 open tickets', assignmentRule: 'least-busy', status: 'active' },
-    { id: 'team-2', name: 'Technical Tier-2', membersCount: 12, capacityRule: 'Max 5 open tickets', assignmentRule: 'skills-based', status: 'active' },
-    { id: 'team-3', name: 'VIP Retention', membersCount: 4, capacityRule: 'Max 2 open tickets', assignmentRule: 'round-robin', status: 'active' },
-  ]);
+  const { data: teams, isLoading, isError } = useTeams();
+  const createTeamMutation = useCreateTeam();
+  const archiveTeamMutation = useArchiveTeam();
 
-  const handleToggleStatus = (id: string) => {
-    setTeams((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: t.status === 'active' ? 'inactive' : 'active' } : t))
+  const [showCreateForm, setShowCreateForm] = React.useState(false);
+  const [name, setName] = React.useState('');
+  const [description, setDescription] = React.useState('');
+  const [department, setDepartment] = React.useState('');
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    createTeamMutation.mutate(
+      { name, description: description || undefined, department: department || undefined },
+      {
+        onSuccess: () => {
+          setName('');
+          setDescription('');
+          setDepartment('');
+          setShowCreateForm(false);
+        },
+      },
     );
+  };
+
+  const handleArchive = (id: string, teamName: string) => {
+    if (confirm(`Archive team "${teamName}"? This cannot be undone.`)) {
+      archiveTeamMutation.mutate({ id });
+    }
   };
 
   return (
@@ -31,10 +42,10 @@ export default function TeamsPage() {
       <div className="flex justify-between items-center bg-white border border-neutral-200 rounded-lg p-6 shadow-xs">
         <div>
           <h1 className="text-base font-bold text-neutral-900">Support Teams</h1>
-          <p className="text-xs text-neutral-500">Manage support queues, member capacities, and automated routing rules.</p>
+          <p className="text-xs text-neutral-500">Manage support queues, member assignments, and routing rules.</p>
         </div>
         <button
-          onClick={() => alert('New team creation form')}
+          onClick={() => setShowCreateForm((v) => !v)}
           className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-900 text-white font-bold text-xs px-3.5 py-2 rounded-md transition"
         >
           <UserPlus className="h-4 w-4" />
@@ -42,66 +53,112 @@ export default function TeamsPage() {
         </button>
       </div>
 
-      {/* Grid of Teams cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {teams.map((team) => (
-          <div key={team.id} className="bg-white border border-neutral-200 rounded-lg p-5 shadow-xs flex flex-col justify-between space-y-4">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <div className="h-9 w-9 bg-primary-50 text-primary-600 rounded-md flex items-center justify-center">
-                    <Users className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-neutral-900">{team.name}</h2>
-                    <span className="text-[10px] text-neutral-400 block mt-0.5">{team.membersCount} active members</span>
-                  </div>
-                </div>
-
-                <span className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${
-                  team.status === 'active' ? 'text-success bg-success/15' : 'text-neutral-500 bg-neutral-100'
-                }`}>
-                  {team.status}
-                </span>
-              </div>
-
-              {/* Specifications List */}
-              <div className="space-y-2 text-xs text-neutral-600 border-t border-neutral-100 pt-3">
-                <div className="flex justify-between items-center">
-                  <span>Routing Strategy</span>
-                  <span className="font-bold text-neutral-800 capitalize">{team.assignmentRule.replace('-', ' ')}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Capacity Limit</span>
-                  <span className="font-semibold text-neutral-800">{team.capacityRule}</span>
-                </div>
-              </div>
+      {showCreateForm && (
+        <form onSubmit={handleCreate} className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs space-y-3 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="team-name" className="font-bold text-neutral-600">Team Name</label>
+              <input
+                id="team-name"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Billing & Payments"
+                className="border border-neutral-200 rounded p-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
             </div>
-
-            {/* Actions Footer */}
-            <div className="flex items-center gap-2 border-t border-neutral-100 pt-3 text-xs">
-              <button
-                onClick={() => handleToggleStatus(team.id)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 border rounded font-semibold transition ${
-                  team.status === 'active'
-                    ? 'border-warning/30 bg-warning/10 text-warning hover:bg-warning/20'
-                    : 'border-success/30 bg-success/10 text-success hover:bg-success/20'
-                }`}
-              >
-                {team.status === 'active' ? 'Deactivate' : 'Activate'}
-              </button>
-              <button
-                onClick={() => alert(`Edit config for team: ${team.name}`)}
-                className="p-1.5 border border-neutral-200 text-neutral-500 hover:bg-neutral-50 rounded"
-                title="Team Settings"
-                aria-label="Team settings"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="team-department" className="font-bold text-neutral-600">Department</label>
+              <input
+                id="team-department"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                placeholder="Customer Success"
+                className="border border-neutral-200 rounded p-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="team-description" className="font-bold text-neutral-600">Description</label>
+              <input
+                id="team-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional"
+                className="border border-neutral-200 rounded p-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
             </div>
           </div>
-        ))}
-      </div>
+          <button
+            type="submit"
+            disabled={createTeamMutation.isPending}
+            className="bg-primary-600 hover:bg-primary-700 text-white font-bold px-3.5 py-2 rounded-md disabled:opacity-60"
+          >
+            {createTeamMutation.isPending ? 'Creating...' : 'Save Team'}
+          </button>
+        </form>
+      )}
+
+      {isLoading && <p className="text-xs text-neutral-400">Loading teams...</p>}
+      {isError && <p className="text-xs text-danger-600">Failed to load teams.</p>}
+
+      {/* Grid of Teams cards */}
+      {teams && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {teams.length === 0 ? (
+            <p className="text-xs text-neutral-400 italic">No teams configured yet.</p>
+          ) : (
+            teams.map((team) => (
+              <div key={team.id} className="bg-white border border-neutral-200 rounded-lg p-5 shadow-xs flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="h-9 w-9 bg-primary-50 text-primary-600 rounded-md flex items-center justify-center">
+                        <Users className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-sm font-bold text-neutral-900">{team.name}</h2>
+                        <span className="text-[10px] text-neutral-400 block mt-0.5">{team.members.length} active members</span>
+                      </div>
+                    </div>
+
+                    <span className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${
+                      team.isActive ? 'text-success bg-success/15' : 'text-neutral-500 bg-neutral-100'
+                    }`}>
+                      {team.isActive ? 'active' : 'archived'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs text-neutral-600 border-t border-neutral-100 pt-3">
+                    <div className="flex justify-between items-center">
+                      <span>Department</span>
+                      <span className="font-bold text-neutral-800">{team.department || '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Routing Rules</span>
+                      <span className="font-semibold text-neutral-800">
+                        {team.rules.length > 0 ? `${team.rules.length} configured` : 'None configured'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {team.isActive && (
+                  <div className="flex items-center gap-2 border-t border-neutral-100 pt-3 text-xs">
+                    <button
+                      onClick={() => handleArchive(team.id, team.name)}
+                      disabled={archiveTeamMutation.isPending}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 border rounded font-semibold transition border-danger/30 bg-danger/10 text-danger hover:bg-danger/20 disabled:opacity-50"
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                      <span>Archive</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

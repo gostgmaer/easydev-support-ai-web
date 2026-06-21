@@ -12,7 +12,10 @@ export default function WidgetWindowLayout({ children }: { children: React.React
   const config = useWidgetStore((state) => state.config);
   // Bootstraps the anonymous visitor's session token once tenantId is known
   // (set by Providers' TenantIdSync) - every widget API/socket call needs it.
-  useEnsureWidgetSession();
+  // Can fail with 403 if the tenant has locked down embedding to specific
+  // domains and this page wasn't loaded from one of them - surface that
+  // instead of leaving the visitor staring at an infinite spinner.
+  const { isError: sessionFailed } = useEnsureWidgetSession();
 
   const navItems = [
     { label: 'Home', href: '/widget', icon: MessageCircle },
@@ -20,6 +23,20 @@ export default function WidgetWindowLayout({ children }: { children: React.React
     { label: 'Tickets', href: '/tickets', icon: StickyNote },
     { label: 'History', href: '/history', icon: History },
   ];
+
+  if (sessionFailed) {
+    return (
+      <div
+        className="w-full max-w-md h-[600px] border border-neutral-200 bg-white rounded-xl shadow-2xl flex items-center justify-center p-6 text-center"
+        role="region"
+        aria-label="Customer Support Widget"
+      >
+        <p className="text-xs font-semibold text-neutral-500">
+          This support widget isn&apos;t available here.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-md h-[600px] border border-neutral-200 bg-white rounded-xl shadow-2xl flex flex-col justify-between overflow-hidden relative" role="region" aria-label="Customer Support Widget">

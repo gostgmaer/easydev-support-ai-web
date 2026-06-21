@@ -1,41 +1,52 @@
 'use client';
 
 import * as React from 'react';
-import { Key, Plus, Trash2, ShieldCheck, Copy, Eye, EyeOff } from 'lucide-react';
-
-interface ApiKeyItem {
-  id: string;
-  name: string;
-  keySnippet: string;
-  scopes: string[];
-  createdAt: string;
-  lastUsed: string;
-}
+import { Key, Plus, Trash2, Copy, AlertTriangle } from 'lucide-react';
+import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '../../../hooks/useAdminQueries';
 
 export default function ApiKeysPage() {
-  const [keys, setKeys] = React.useState<ApiKeyItem[]>([
-    { id: 'key-1', name: 'CRM Sync Pipeline', keySnippet: 'easydev_live_8f3d...2f1a', scopes: ['tickets:read', 'customers:write'], createdAt: '2026-05-15', lastUsed: '2026-06-20' },
-    { id: 'key-2', name: 'Analytics Reader Token', keySnippet: 'easydev_live_1d2e...4e5f', scopes: ['metrics:read'], createdAt: '2026-06-01', lastUsed: '2026-06-21' },
-  ]);
+  const { data: keys, isLoading, isError } = useApiKeys();
+  const createKeyMutation = useCreateApiKey();
+  const revokeKeyMutation = useRevokeApiKey();
 
-  const [showFullKeys, setShowFullKeys] = React.useState<Record<string, boolean>>({});
+  const [showCreateForm, setShowCreateForm] = React.useState(false);
+  const [name, setName] = React.useState('');
+  const [scopesInput, setScopesInput] = React.useState('');
+  const [revealedKey, setRevealedKey] = React.useState<string | null>(null);
 
-  const handleRevokeKey = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to revoke API Key: ${name}?`)) {
-      setKeys((prev) => prev.filter((k) => k.id !== id));
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    const scopes = scopesInput.split(',').map((s) => s.trim()).filter(Boolean);
+    if (!name.trim() || scopes.length === 0) return;
+
+    createKeyMutation.mutate(
+      { name, scopes },
+      {
+        onSuccess: (data) => {
+          setRevealedKey(data.rawKey);
+          setName('');
+          setScopesInput('');
+          setShowCreateForm(false);
+        },
+      },
+    );
+  };
+
+  const handleRevokeKey = (id: string, keyName: string) => {
+    if (confirm(`Are you sure you want to revoke API Key: ${keyName}?`)) {
+      revokeKeyMutation.mutate({ id });
     }
   };
 
-  const handleGenerateKey = () => {
-    const newKey: ApiKeyItem = {
-      id: `key-${Date.now()}`,
-      name: prompt('Enter a descriptive name for the API Key:') || 'Unnamed API Key',
-      keySnippet: `easydev_live_${Math.random().toString(36).substring(2, 6)}...${Math.random().toString(36).substring(2, 6)}`,
-      scopes: ['tickets:read'],
-      createdAt: new Date().toISOString().split('T')[0],
-      lastUsed: 'Never',
-    };
-    setKeys((prev) => [...prev, newKey]);
+  const getStatusTone = (status: string) => {
+    switch (status) {
+      case 'ACTIVE':
+        return 'text-success bg-success/15';
+      case 'EXPIRED':
+        return 'text-warning bg-warning/15';
+      default:
+        return 'text-neutral-500 bg-neutral-100';
+    }
   };
 
   return (
@@ -47,13 +58,71 @@ export default function ApiKeysPage() {
           <p className="text-xs text-neutral-500">Generate, track, and revoke access keys used by external webhook scripts and CRM connectors.</p>
         </div>
         <button
-          onClick={handleGenerateKey}
+          onClick={() => setShowCreateForm((v) => !v)}
           className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-900 text-white font-bold text-xs px-3.5 py-2 rounded-md transition"
         >
           <Plus className="h-4 w-4" />
           <span>Generate API Key</span>
         </button>
       </div>
+
+      {revealedKey && (
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 text-xs space-y-2">
+          <p className="font-bold text-warning flex items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4" />
+            <span>Copy this key now - it will not be shown again</span>
+          </p>
+          <div className="flex items-center gap-2 bg-white border border-neutral-200 rounded p-2 font-mono text-neutral-800">
+            <span className="flex-1 break-all">{revealedKey}</span>
+            <button
+              onClick={() => navigator.clipboard.writeText(revealedKey)}
+              className="p-1 hover:bg-neutral-100 rounded shrink-0"
+              aria-label="Copy API key"
+            >
+              <Copy className="h-3.5 w-3.5 text-neutral-500" />
+            </button>
+          </div>
+          <button onClick={() => setRevealedKey(null)} className="text-neutral-500 hover:text-neutral-700 font-semibold">
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {showCreateForm && (
+        <form onSubmit={handleCreate} className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs space-y-3 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="key-name" className="font-bold text-neutral-600">Key Name</label>
+              <input
+                id="key-name"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="CRM Sync Pipeline"
+                className="border border-neutral-200 rounded p-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="key-scopes" className="font-bold text-neutral-600">Scopes (comma-separated)</label>
+              <input
+                id="key-scopes"
+                required
+                value={scopesInput}
+                onChange={(e) => setScopesInput(e.target.value)}
+                placeholder="tickets:read, customers:write"
+                className="border border-neutral-200 rounded p-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={createKeyMutation.isPending}
+            className="bg-primary-600 hover:bg-primary-700 text-white font-bold px-3.5 py-2 rounded-md disabled:opacity-60"
+          >
+            {createKeyMutation.isPending ? 'Generating...' : 'Generate Key'}
+          </button>
+        </form>
+      )}
 
       {/* Keys List */}
       <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs space-y-4">
@@ -62,56 +131,62 @@ export default function ApiKeysPage() {
           <span>Active API Keys</span>
         </h2>
 
-        {keys.length > 0 ? (
-          <div className="overflow-x-auto border border-neutral-100 rounded-lg text-xs">
-            <table className="w-full text-left divide-y divide-neutral-100">
-              <thead className="bg-neutral-50 font-bold text-neutral-500">
-                <tr>
-                  <th className="p-3">Key Name</th>
-                  <th className="p-3">Token Snippet</th>
-                  <th className="p-3">Permission Scopes</th>
-                  <th className="p-3">Created</th>
-                  <th className="p-3">Last Active</th>
-                  <th className="p-3 text-right">Revoke</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100 text-neutral-700">
-                {keys.map((k) => (
-                  <tr key={k.id}>
-                    <td className="p-3 font-semibold text-neutral-800">{k.name}</td>
-                    <td className="p-3 font-mono text-neutral-500 flex items-center gap-2">
-                      <span>{k.keySnippet}</span>
-                      <button onClick={() => alert('Token snippet copied to clipboard')} className="p-1 hover:bg-neutral-100 rounded">
-                        <Copy className="h-3.5 w-3.5 text-neutral-400" />
-                      </button>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-1">
-                        {k.scopes.map((scope, idx) => (
-                          <span key={idx} className="bg-neutral-100 border border-neutral-200 text-[10px] px-1.5 py-0.25 rounded font-semibold text-neutral-700">
-                            {scope}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="p-3">{k.createdAt}</td>
-                    <td className="p-3 font-semibold text-neutral-600">{k.lastUsed}</td>
-                    <td className="p-3 text-right">
-                      <button
-                        onClick={() => handleRevokeKey(k.id, k.name)}
-                        className="text-neutral-400 hover:text-danger p-1"
-                        aria-label={`Revoke API Key ${k.name}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
+        {isLoading && <p className="text-xs text-neutral-400">Loading keys...</p>}
+        {isError && <p className="text-xs text-danger-600">Failed to load API keys.</p>}
+
+        {keys && (
+          keys.length > 0 ? (
+            <div className="overflow-x-auto border border-neutral-100 rounded-lg text-xs">
+              <table className="w-full text-left divide-y divide-neutral-100">
+                <thead className="bg-neutral-50 font-bold text-neutral-500">
+                  <tr>
+                    <th className="p-3">Key Name</th>
+                    <th className="p-3">Token Prefix</th>
+                    <th className="p-3">Permission Scopes</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Created</th>
+                    <th className="p-3 text-right">Revoke</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-xs text-neutral-400 italic py-8 text-center">No active API keys found. Generate a key to begin scripting.</p>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 text-neutral-700">
+                  {keys.map((k) => (
+                    <tr key={k.id}>
+                      <td className="p-3 font-semibold text-neutral-800">{k.name}</td>
+                      <td className="p-3 font-mono text-neutral-500">{k.keyPrefix}...</td>
+                      <td className="p-3">
+                        <div className="flex flex-wrap gap-1">
+                          {k.scopes.map((scope) => (
+                            <span key={scope} className="bg-neutral-100 border border-neutral-200 text-[10px] px-1.5 py-0.25 rounded font-semibold text-neutral-700">
+                              {scope}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <span className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${getStatusTone(k.status)}`}>
+                          {k.status}
+                        </span>
+                      </td>
+                      <td className="p-3">{new Date(k.createdAt).toLocaleDateString()}</td>
+                      <td className="p-3 text-right">
+                        {k.status === 'ACTIVE' && (
+                          <button
+                            onClick={() => handleRevokeKey(k.id, k.name)}
+                            className="text-neutral-400 hover:text-danger p-1"
+                            aria-label={`Revoke API Key ${k.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-xs text-neutral-400 italic py-8 text-center">No active API keys found. Generate a key to begin scripting.</p>
+          )
         )}
       </div>
     </div>

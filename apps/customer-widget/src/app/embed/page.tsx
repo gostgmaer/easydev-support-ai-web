@@ -11,17 +11,29 @@ function EmbedContent() {
   const { getFlag, isLoading } = useFeatureFlags();
   const [isOpen, setIsOpen] = React.useState(false);
 
-  // Notify parent document to resize iframe container on launcher actions
+  // Notify parent document to resize iframe container on launcher actions.
+  // Target the parent's real origin (derived from document.referrer, the only
+  // signal a cross-origin iframe has for "who embedded me") rather than '*',
+  // so the toggle state isn't broadcast to every window listening on the page.
+  // embed.js's own message listener already filters by event.origin === baseUrl
+  // on the host side - this just avoids being the loose end on our side too.
   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.parent.postMessage(
-        {
-          event: 'widget:toggle',
-          open: isOpen,
-        },
-        '*'
-      );
+    if (typeof window === 'undefined') return;
+    let targetOrigin = '*';
+    try {
+      if (document.referrer) {
+        targetOrigin = new URL(document.referrer).origin;
+      }
+    } catch {
+      targetOrigin = '*';
     }
+    window.parent.postMessage(
+      {
+        event: 'widget:toggle',
+        open: isOpen,
+      },
+      targetOrigin,
+    );
   }, [isOpen]);
 
   if (!tenantId) {

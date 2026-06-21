@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { RequireAuth, useAuth } from '@easydev/auth';
+import { useTenantStore } from '@easydev/stores';
 import { AdminLayout } from '@easydev/ui';
 import {
   LayoutDashboard,
@@ -24,7 +25,20 @@ import {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user, tenant, logout } = useAuth();
+  const { tenant, logout, switchTenant } = useAuth();
+  const availableTenants = useTenantStore((state) => state.available);
+  const switching = useTenantStore((state) => state.switching);
+
+  const handleSwitchTenant = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const tenantId = event.target.value;
+    if (!tenantId || tenantId === tenant?.id) return;
+    try {
+      await switchTenant(tenantId);
+    } catch {
+      // RequireAuth/session listeners surface auth failures elsewhere; this
+      // switcher just needs to not crash the layout on a failed switch.
+    }
+  };
 
   const navigationItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -72,10 +86,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest leading-none">Active Tenant</span>
         <span className="text-xs font-extrabold text-neutral-800 truncate mt-1 max-w-[150px]">{tenant?.name || 'Default Org'}</span>
       </div>
-      <select className="border border-neutral-200 rounded p-1 bg-white text-[10px] font-bold cursor-pointer" aria-label="Tenant switcher">
-        <option>PROD-01</option>
-        <option>STG-02</option>
-      </select>
+      {availableTenants.length > 1 && (
+        <select
+          value={tenant?.id ?? ''}
+          onChange={handleSwitchTenant}
+          disabled={switching}
+          className="border border-neutral-200 rounded p-1 bg-white text-[10px] font-bold cursor-pointer disabled:opacity-50"
+          aria-label="Tenant switcher"
+        >
+          {availableTenants.map((membership) => (
+            <option key={membership.tenant.id} value={membership.tenant.id}>
+              {membership.tenant.name}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   );
 

@@ -28,6 +28,9 @@ export default function PublicPortalLayout({ children }: { children: React.React
   const [searchVal, setSearchVal] = React.useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
+  const widgetEmbedUrl = process.env.NEXT_PUBLIC_WIDGET_EMBED_URL;
+  const widgetTenantId = process.env.NEXT_PUBLIC_WIDGET_TENANT_ID;
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchVal.trim()) {
@@ -320,12 +323,13 @@ export default function PublicPortalLayout({ children }: { children: React.React
       </footer>
 
       {/* 4. Live Chat Widget Launcher integration */}
-      {/* Inserts the embedded chat launcher referencing our customer widget iframe */}
-      <script
-        src="http://localhost:3002/embed.js"
-        data-tenant-id="tenant-ecom-101"
-        defer
-      />
+      {/* Inserts the embedded chat launcher referencing our customer widget iframe.
+          Both values are deployment-specific (one help-center deployment serves one
+          tenant) - omit the script entirely rather than fall back to a fake/dev
+          tenant ID when they aren't configured. */}
+      {widgetEmbedUrl && widgetTenantId && (
+        <script src={widgetEmbedUrl} data-tenant-id={widgetTenantId} defer />
+      )}
     </div>
   );
 }

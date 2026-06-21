@@ -43,6 +43,30 @@ export interface IncidentAlert {
   createdAt: string;
 }
 
+export interface Team {
+  id: string;
+  name: string;
+  description?: string;
+  department?: string;
+  priority: number;
+  isActive: boolean;
+  members: { agentProfileId: string }[];
+  rules: { ruleType: string }[];
+  createdAt: string;
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  scopes: string[];
+  status: 'ACTIVE' | 'REVOKED' | 'EXPIRED';
+  expiresAt?: string;
+  lastUsedAt?: string;
+  usageCount: number;
+  createdAt: string;
+}
+
 // 2. Combined Store State
 interface AdminState {
   metrics: SystemMetric;
@@ -50,9 +74,11 @@ interface AdminState {
   documents: KnowledgeDocument[];
   workflows: WorkflowRule[];
   incidents: IncidentAlert[];
+  teams: Team[];
+  apiKeys: ApiKey[];
   isGlobalSearchOpen: boolean;
   activeNotificationsCount: number;
-  
+
   // Actions
   setMetrics: (metrics: SystemMetric) => void;
   setConnectors: (connectors: Connector[]) => void;
@@ -63,6 +89,12 @@ interface AdminState {
   toggleWorkflowStatus: (id: string) => void;
   setIncidents: (incidents: IncidentAlert[]) => void;
   resolveIncident: (id: string) => void;
+  setTeams: (teams: Team[]) => void;
+  addTeam: (team: Team) => void;
+  updateTeam: (team: Team) => void;
+  setApiKeys: (keys: ApiKey[]) => void;
+  addApiKey: (key: ApiKey) => void;
+  removeApiKey: (id: string) => void;
   setGlobalSearchOpen: (open: boolean) => void;
   clearNotifications: () => void;
 }
@@ -80,6 +112,8 @@ export const useAdminStore = create<AdminState>((set) => ({
   documents: [],
   workflows: [],
   incidents: [],
+  teams: [],
+  apiKeys: [],
   isGlobalSearchOpen: false,
   activeNotificationsCount: 3,
 
@@ -103,6 +137,16 @@ export const useAdminStore = create<AdminState>((set) => ({
     set((state) => ({
       incidents: state.incidents.map((i) => (i.id === id ? { ...i, status: 'resolved' } : i)),
     })),
+  setTeams: (teams) => set({ teams }),
+  addTeam: (team) => set((state) => ({ teams: [team, ...state.teams] })),
+  updateTeam: (team) =>
+    set((state) => ({
+      teams: state.teams.map((t) => (t.id === team.id ? team : t)),
+    })),
+  setApiKeys: (apiKeys) => set({ apiKeys }),
+  addApiKey: (key) => set((state) => ({ apiKeys: [key, ...state.apiKeys] })),
+  removeApiKey: (id) =>
+    set((state) => ({ apiKeys: state.apiKeys.filter((k) => k.id !== id) })),
   setGlobalSearchOpen: (isGlobalSearchOpen) => set({ isGlobalSearchOpen }),
   clearNotifications: () => set({ activeNotificationsCount: 0 }),
 }));
