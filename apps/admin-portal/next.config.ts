@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
     '@easydev/feature-flags',
     '@easydev/stores',
     '@easydev/analytics',
+    '@easydev/ui',
   ],
 };
 
