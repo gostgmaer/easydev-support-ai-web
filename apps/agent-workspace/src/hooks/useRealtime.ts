@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@easydev/stores';
 import { useRealtimeStore } from '../store/realtimeStore';
 import { useInboxStore } from '../store/inboxStore';
 import { useConversationStore } from '../store/conversationStore';
 import { useTicketStore } from '../store/ticketStore';
 import { useNotificationStore } from '../store/notificationStore';
-import { Message, Conversation, Ticket, PresenceUser, AiDraft, Notification } from '../types';
+import { useAiStore } from '../store/aiStore';
+import { Message, Conversation, Ticket, PresenceUser, AiDraft, AiEscalation, AiSessionState, Notification, WorkflowExecution } from '../types';
 
 let socketInstance: Socket | null = null;
 
@@ -26,19 +28,24 @@ export const getSocket = () => {
 
 export function useRealtime(agentId?: string) {
   const socketRef = useRef<Socket | null>(null);
+  const queryClient = useQueryClient();
   const setConnected = useRealtimeStore((state) => state.setConnected);
+  const setConnectionStatus = useRealtimeStore((state) => state.setConnectionStatus);
   const updatePresence = useRealtimeStore((state) => state.updatePresence);
   const setPresenceList = useRealtimeStore((state) => state.setPresenceList);
   const removePresence = useRealtimeStore((state) => state.removePresence);
-  
+
   const addMessage = useConversationStore((state) => state.addMessage);
   const setTyping = useConversationStore((state) => state.setTyping);
-  const setAiDraft = useConversationStore((state) => state.setAiDraft);
   const updateMessageReadReceipts = useConversationStore((state) => state.updateMessageReadReceipts);
-  
+
   const updateConversation = useInboxStore((state) => state.updateConversation);
   const updateTicket = useTicketStore((state) => state.updateTicket);
   const addNotification = useNotificationStore((state) => state.addNotification);
+
+  const setAiDraft = useAiStore((state) => state.setDraft);
+  const setAiSession = useAiStore((state) => state.setSession);
+  const addAiEscalation = useAiStore((state) => state.addEscalation);
 
   useEffect(() => {
     if (!agentId) return;
@@ -56,11 +63,25 @@ export function useRealtime(agentId?: string) {
 
     socket.on('connect', () => {
       setConnected(true);
+      setConnectionStatus('CONNECTED');
       socket.emit('agent:presence:online', { agentId });
     });
 
     socket.on('disconnect', () => {
       setConnected(false);
+      setConnectionStatus('DISCONNECTED');
+    });
+
+    socket.io.on('reconnect_attempt', () => {
+      setConnectionStatus('RECONNECTING');
+    });
+
+    // Offline recovery: socket.io-client already retries the connection itself
+    // (reconnection: true above); once it's back, refresh whatever queries are
+    // mounted so the UI doesn't keep showing data that went stale while offline.
+    socket.io.on('reconnect', () => {
+      setConnectionStatus('CONNECTED');
+      queryClient.invalidateQueries();
     });
 
     // Realtime Handlers
@@ -109,9 +130,24 @@ export function useRealtime(agentId?: string) {
       addNotification(notification);
     });
 
+    socket.on('ai:session:updated', (data: { conversationId: string; session: AiSessionState }) => {
+      setAiSession(data.conversationId, data.session);
+    });
+
+    socket.on('ai:escalation:created', (escalation: AiEscalation) => {
+      addAiEscalation(escalation);
+    });
+
+    socket.on('workflow:execution:updated', (data: { id: string; updates: Partial<WorkflowExecution> }) => {
+      queryClient.invalidateQueries({ queryKey: ['workflow-executions'] });
+      queryClient.invalidateQueries({ queryKey: ['workflow-execution', data.id] });
+    });
+
     return () => {
       socket.off('connect');
       socket.off('disconnect');
+      socket.io.off('reconnect_attempt');
+      socket.io.off('reconnect');
       socket.off('presence:list');
       socket.off('presence:update');
       socket.off('presence:offline');
@@ -122,8 +158,28 @@ export function useRealtime(agentId?: string) {
       socket.off('ticket:updated');
       socket.off('ai:draft_suggested');
       socket.off('notification:new');
+      socket.off('ai:session:updated');
+      socket.off('ai:escalation:created');
+      socket.off('workflow:execution:updated');
     };
-  }, [agentId, setConnected, updatePresence, setPresenceList, removePresence, addMessage, setTyping, setAiDraft, updateMessageReadReceipts, updateConversation, updateTicket, addNotification]);
+  }, [
+    agentId,
+    queryClient,
+    setConnected,
+    setConnectionStatus,
+    updatePresence,
+    setPresenceList,
+    removePresence,
+    addMessage,
+    setTyping,
+    setAiDraft,
+    setAiSession,
+    addAiEscalation,
+    updateMessageReadReceipts,
+    updateConversation,
+    updateTicket,
+    addNotification,
+  ]);
 
   // Emitters
   const emitTyping = (conversationId: string, isTyping: boolean) => {

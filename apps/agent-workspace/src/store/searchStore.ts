@@ -4,16 +4,16 @@ interface SavedSearch {
   id: string;
   name: string;
   query: string;
-  category: 'conversations' | 'tickets' | 'customers' | 'all';
+  category: 'conversations' | 'tickets' | 'customers' | 'knowledge' | 'all';
 }
 
 interface SearchState {
   query: string;
-  category: 'conversations' | 'tickets' | 'customers' | 'all';
+  category: 'conversations' | 'tickets' | 'customers' | 'knowledge' | 'all';
   recentSearches: string[];
   savedSearches: SavedSearch[];
   setQuery: (query: string) => void;
-  setCategory: (category: 'conversations' | 'tickets' | 'customers' | 'all') => void;
+  setCategory: (category: 'conversations' | 'tickets' | 'customers' | 'knowledge' | 'all') => void;
   addRecentSearch: (query: string) => void;
   clearRecentSearches: () => void;
   addSavedSearch: (name: string, query: string, category: SearchState['category']) => void;

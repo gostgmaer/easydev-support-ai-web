@@ -28,6 +28,7 @@ export * from './Tag';
 export * from './Chip';
 export * from './Tooltip';
 export * from './Popover';
+export * from './Tabs';
 export * from './Dropdown';
 export * from './ContextMenu';
 export * from './Breadcrumb';

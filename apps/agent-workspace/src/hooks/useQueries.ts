@@ -1,26 +1,119 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '@easydev/api-client';
 import { useAuth } from '@easydev/auth';
-import { useInboxStore } from '../store/inboxStore';
+import { useInboxStore, type InboxFilters, type InboxView } from '../store/inboxStore';
 import { useConversationStore } from '../store/conversationStore';
 import { useTicketStore } from '../store/ticketStore';
-import { Conversation, Message, Customer, Ticket, KnowledgeArticle, Notification } from '../types';
+import { useCustomerStore } from '../store/customerStore';
+import { normalizeConversation, normalizeTicket, priorityToBackend, ticketStatusToBackend } from '../lib/normalize';
+import {
+  AgentProfile,
+  Conversation,
+  Customer,
+  Message,
+  MessageTemplate,
+  Ticket,
+  TicketComment,
+} from '../types';
 
-// 1. QUERY HOOKS
-export function useConversations(view: string, filters: Record<string, unknown>) {
+interface InboxPage {
+  data: Conversation[];
+  nextCursor?: string;
+}
+
+// 1. UNIFIED INBOX (real backend surface is /v1/inbox/*, not a generic /v1/conversations list)
+export function useConversations(view: InboxView, filters: InboxFilters, teamId?: string | null) {
   const api = useApiClient();
   const setConversations = useInboxStore((state) => state.setConversations);
-  return useQuery<Conversation[]>({
-    queryKey: ['conversations', view, filters],
-    queryFn: async () => {
-      const data = await api.get<Conversation[]>('/v1/conversations', {
-        query: { view, filters: JSON.stringify(filters) },
+  const setPagination = useInboxStore((state) => state.setPagination);
+  const bookmarkedIds = useInboxStore((state) => state.bookmarkedIds);
+
+  const query = useInfiniteQuery<InboxPage>({
+    queryKey: ['inbox', view, filters, teamId],
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
+      const baseQuery: Record<string, string | undefined> = {
+        cursor: pageParam as string | undefined,
+        limit: '25',
+      };
+      if (filters.assignedAgentId) baseQuery.assignedAgentId = filters.assignedAgentId;
+
+      let path = '/v1/inbox';
+      switch (view) {
+        case 'my':
+          path = '/v1/inbox/mine';
+          break;
+        case 'unassigned':
+          path = '/v1/inbox/unassigned';
+          break;
+        case 'team':
+          if (!teamId) return { data: [], nextCursor: undefined };
+          path = `/v1/inbox/team/${teamId}`;
+          break;
+        case 'escalated':
+          // No "escalated" flag exists in the conversation domain - urgent priority is the
+          // closest real, queryable signal for conversations needing immediate attention.
+          baseQuery.priority = 'URGENT';
+          break;
+        case 'snoozed':
+          // No "snoozed" status exists - WAITING_AGENT (parked for agent follow-up) is the
+          // closest real backend status.
+          baseQuery.status = 'WAITING_AGENT';
+          break;
+        case 'bookmarks':
+          // Bookmarks are a client-only preference (see inboxStore) - fetch the general
+          // listing and filter to bookmarked ids client-side below.
+          break;
+      }
+
+      if (filters.status?.[0] && view !== 'snoozed') baseQuery.status = filters.status[0].toUpperCase();
+      if (filters.priority?.[0] && view !== 'escalated') baseQuery.priority = filters.priority[0].toUpperCase();
+
+      const result = await api.get<{ data: Record<string, unknown>[]; nextCursor?: string }>(path, {
+        query: baseQuery,
       });
-      setConversations(data);
-      return data;
+      return { data: result.data.map(normalizeConversation), nextCursor: result.nextCursor };
     },
-    staleTime: 5000,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    enabled: view !== 'team' || !!teamId,
   });
+
+  useEffect(() => {
+    if (!query.data) return;
+    const all = query.data.pages.flatMap((page) => page.data);
+    const visible = view === 'bookmarks' ? all.filter((c) => bookmarkedIds.has(c.id)) : all;
+    setConversations(visible);
+    const lastPage = query.data.pages[query.data.pages.length - 1];
+    setPagination({ nextCursor: lastPage?.nextCursor ?? null, hasMore: !!lastPage?.nextCursor });
+  }, [query.data, view, bookmarkedIds, setConversations, setPagination]);
+
+  return query;
+}
+
+export function useConversationDetails(conversationId: string | null) {
+  const api = useApiClient();
+  const updateConversation = useInboxStore((state) => state.updateConversation);
+  const conversations = useInboxStore((state) => state.conversations);
+  const appendConversations = useInboxStore((state) => state.appendConversations);
+
+  const query = useQuery<Conversation>({
+    queryKey: ['conversation', conversationId],
+    queryFn: async () => {
+      if (!conversationId) throw new Error('Conversation ID is required');
+      return normalizeConversation(await api.get<Record<string, unknown>>(`/v1/conversations/${conversationId}`));
+    },
+    enabled: !!conversationId && !conversations.some((c) => c.id === conversationId),
+  });
+
+  useEffect(() => {
+    if (query.data) {
+      if (conversations.some((c) => c.id === query.data!.id)) updateConversation(query.data.id, query.data);
+      else appendConversations([query.data]);
+    }
+  }, [query.data, conversations, updateConversation, appendConversations]);
+
+  return query;
 }
 
 export function useConversationMessages(conversationId: string | null) {
@@ -40,13 +133,91 @@ export function useConversationMessages(conversationId: string | null) {
 
 export function useCustomerDetails(customerId: string | null) {
   const api = useApiClient();
+  const setCustomer = useCustomerStore((state) => state.setCustomer);
   return useQuery<Customer>({
     queryKey: ['customer', customerId],
     queryFn: async () => {
       if (!customerId) throw new Error('Customer ID is required');
-      return api.get<Customer>(`/v1/customers/${customerId}`);
+      const data = await api.get<Customer>(`/v1/customers/${customerId}`);
+      setCustomer(customerId, data);
+      return data;
     },
     enabled: !!customerId,
+  });
+}
+
+export function useCustomerConversations(customerId: string | null) {
+  const api = useApiClient();
+  return useQuery<Conversation[]>({
+    queryKey: ['customer-conversations', customerId],
+    queryFn: async () => {
+      if (!customerId) return [];
+      const result = await api.get<{ data: Record<string, unknown>[] }>('/v1/conversations', {
+        query: { customerId },
+      });
+      return result.data.map(normalizeConversation);
+    },
+    enabled: !!customerId,
+  });
+}
+
+export function useCustomerTickets(customerId: string | null) {
+  const api = useApiClient();
+  return useQuery<Ticket[]>({
+    queryKey: ['customer-tickets', customerId],
+    queryFn: async () => {
+      if (!customerId) return [];
+      const result = await api.get<{ data: Record<string, unknown>[] }>('/v1/tickets', {
+        query: { customerId },
+      });
+      return result.data.map(normalizeTicket);
+    },
+    enabled: !!customerId,
+  });
+}
+
+/** Tickets and conversations are separate entities, not the same id - this resolves the
+ * ticket (if any) linked to a conversation via the ticket list's conversationId filter. */
+export function useTicketByConversation(conversationId: string | null) {
+  const api = useApiClient();
+  const setTicket = useTicketStore((state) => state.setTicket);
+  return useQuery<Ticket | null>({
+    queryKey: ['ticket-by-conversation', conversationId],
+    queryFn: async () => {
+      if (!conversationId) return null;
+      const result = await api.get<{ data: Record<string, unknown>[] }>('/v1/tickets', {
+        query: { conversationId },
+      });
+      if (result.data.length === 0) return null;
+      const ticket = normalizeTicket(result.data[0]);
+      setTicket(ticket.id, ticket);
+      return ticket;
+    },
+    enabled: !!conversationId,
+  });
+}
+
+export function useConversationSearch(q: string) {
+  const api = useApiClient();
+  return useQuery<Conversation[]>({
+    queryKey: ['search-conversations', q],
+    queryFn: async () => {
+      const results = await api.get<Record<string, unknown>[]>('/v1/conversations/search', { query: { q } });
+      return results.map(normalizeConversation);
+    },
+    enabled: q.length > 1,
+  });
+}
+
+export function useTicketSearch(q: string) {
+  const api = useApiClient();
+  return useQuery<Ticket[]>({
+    queryKey: ['search-tickets', q],
+    queryFn: async () => {
+      const result = await api.get<{ data: Record<string, unknown>[] }>('/v1/tickets/search', { query: { search: q } });
+      return result.data.map(normalizeTicket);
+    },
+    enabled: q.length > 1,
   });
 }
 
@@ -57,7 +228,7 @@ export function useTicketDetails(ticketId: string | null) {
     queryKey: ['ticket', ticketId],
     queryFn: async () => {
       if (!ticketId) throw new Error('Ticket ID is required');
-      const data = await api.get<Ticket>(`/v1/tickets/${ticketId}`);
+      const data = normalizeTicket(await api.get<Record<string, unknown>>(`/v1/tickets/${ticketId}`));
       setTicket(ticketId, data);
       return data;
     },
@@ -65,23 +236,38 @@ export function useTicketDetails(ticketId: string | null) {
   });
 }
 
-export function useKnowledgeSearch(query: string) {
+export function useUpdatePresence() {
   const api = useApiClient();
-  return useQuery<KnowledgeArticle[]>({
-    queryKey: ['knowledge', query],
-    queryFn: async () => {
-      if (!query.trim()) return [];
-      return api.get<KnowledgeArticle[]>('/v1/knowledge-search', { query: { query } });
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      agentProfileId,
+      status,
+    }: {
+      agentProfileId: string;
+      status: 'ONLINE' | 'AWAY' | 'BUSY' | 'OFFLINE';
+    }) => {
+      return api.put(`/v1/availability/${agentProfileId}`, { status });
     },
-    enabled: query.length > 1,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-profile', user?.id] });
+    },
   });
 }
 
-export function useNotificationsList() {
+export function useMyAgentProfile() {
   const api = useApiClient();
-  return useQuery<Notification[]>({
-    queryKey: ['notifications'],
-    queryFn: async () => api.get<Notification[]>('/v1/notifications'),
+  const { user } = useAuth();
+  return useQuery<AgentProfile | null>({
+    queryKey: ['agent-profile', user?.id],
+    queryFn: async () => {
+      const result = await api.get<{ data: AgentProfile[] }>('/v1/agents', { query: { userId: user!.id } });
+      return result.data[0] ?? null;
+    },
+    enabled: !!user?.id,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -105,7 +291,6 @@ export function useSendMessage() {
       return api.post<Message>('/v1/messages', { conversationId, content, isInternalNote });
     },
     onMutate: async (variables) => {
-      // Cancel queries to avoid overwrites
       await queryClient.cancelQueries({ queryKey: ['messages', variables.conversationId] });
 
       const tempMessage: Message = {
@@ -119,19 +304,14 @@ export function useSendMessage() {
         createdAt: new Date().toISOString(),
       };
 
-      // Optimistically add message
       addMessage(variables.conversationId, tempMessage);
-
       return { tempMessage };
     },
     onSuccess: (data, variables) => {
-      queryClient.setQueryData(
-        ['messages', variables.conversationId],
-        (old: Message[] | undefined) => {
-          const list = old ? [...old] : [];
-          return list.map((m) => (m.id.startsWith('temp-') ? data : m));
-        }
-      );
+      queryClient.setQueryData(['messages', variables.conversationId], (old: Message[] | undefined) => {
+        const list = old ? [...old] : [];
+        return list.map((m) => (m.id.startsWith('temp-') ? data : m));
+      });
     },
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['messages', variables.conversationId] });
@@ -151,29 +331,10 @@ export function useAssignConversation() {
       });
     },
     onMutate: async ({ conversationId, agentId }) => {
-      // Optimistic update
       updateConversation(conversationId, { assignedAgentId: agentId });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
-    },
-  });
-}
-
-export function useUpdateAiStatus() {
-  const api = useApiClient();
-  const queryClient = useQueryClient();
-  const updateConversation = useInboxStore((state) => state.updateConversation);
-
-  return useMutation({
-    mutationFn: async ({ conversationId, status }: { conversationId: string; status: 'active' | 'paused' | 'takeover' }) => {
-      return api.post<Conversation>(`/v1/conversations/${conversationId}/ai-status`, { status });
-    },
-    onMutate: async ({ conversationId, status }) => {
-      updateConversation(conversationId, { aiStatus: status });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['inbox'] });
     },
   });
 }
@@ -185,11 +346,97 @@ export function useUpdateTicket() {
 
   return useMutation({
     mutationFn: async ({ ticketId, updates }: { ticketId: string; updates: Partial<Ticket> }) => {
-      return api.put<Ticket>(`/v1/tickets/${ticketId}`, updates);
+      const payload: Record<string, unknown> = { ...updates };
+      if (updates.status) payload.status = ticketStatusToBackend(updates.status);
+      if (updates.priority) payload.priority = priorityToBackend(updates.priority);
+      return normalizeTicket(await api.put<Record<string, unknown>>(`/v1/tickets/${ticketId}`, payload));
     },
     onMutate: async ({ ticketId, updates }) => {
       updateTicketState(ticketId, updates);
     },
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
+    },
+  });
+}
+
+export function useCreateTicket() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { conversationId: string; subject: string; priority: Ticket['priority'] }) => {
+      return normalizeTicket(
+        await api.post<Record<string, unknown>>('/v1/tickets', {
+          conversationId: payload.conversationId,
+          subject: payload.subject,
+          priority: priorityToBackend(payload.priority),
+        }),
+      );
+    },
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['ticket', variables.conversationId] });
+    },
+  });
+}
+
+export function useConversationTags(conversationId: string | null) {
+  const api = useApiClient();
+  return useQuery<string[]>({
+    queryKey: ['conversation-tags', conversationId],
+    queryFn: async () => {
+      if (!conversationId) return [];
+      return api.get<string[]>(`/v1/conversations/${conversationId}/tags`);
+    },
+    enabled: !!conversationId,
+  });
+}
+
+export function useAddConversationTag() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ conversationId, tag }: { conversationId: string; tag: string }) => {
+      return api.post<string[]>(`/v1/conversations/${conversationId}/tags`, { tag });
+    },
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['conversation-tags', variables.conversationId] });
+    },
+  });
+}
+
+export function useRemoveConversationTag() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ conversationId, tag }: { conversationId: string; tag: string }) => {
+      return api.delete<void>(`/v1/conversations/${conversationId}/tags/${encodeURIComponent(tag)}`);
+    },
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['conversation-tags', variables.conversationId] });
+    },
+  });
+}
+
+export function useMessageTemplates() {
+  const api = useApiClient();
+  return useQuery<MessageTemplate[]>({
+    queryKey: ['message-templates'],
+    queryFn: async () => api.get<MessageTemplate[]>('/v1/message-templates'),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useAddTicketComment() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const addComment = useTicketStore((state) => state.addComment);
+
+  return useMutation({
+    mutationFn: async ({ ticketId, content }: { ticketId: string; content: string }) => {
+      return api.post<TicketComment>(`/v1/tickets/${ticketId}/comments`, { content });
+    },
+    onSuccess: (comment, { ticketId }) => addComment(ticketId, comment),
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
     },

@@ -1,3 +1,5 @@
+import type { PresenceStatus as PresenceStatusValue } from '@easydev/types';
+
 export type AgentStatus = 'online' | 'busy' | 'offline';
 
 export interface PresenceUser {
@@ -152,4 +154,71 @@ export interface KnowledgeArticle {
   content: string;
   score: number;
   category: string;
+}
+
+/** A file attached to the composer before/while it's being uploaded - distinct from
+ * Message['attachments'], which is the immutable, already-sent attachment list. */
+export interface AttachmentMeta {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  status: 'uploading' | 'uploaded' | 'failed';
+  progress: number;
+  url?: string;
+}
+
+export type AiSessionStatus = 'idle' | 'thinking' | 'drafting' | 'escalated' | 'completed';
+
+export interface AiSessionState {
+  conversationId: string;
+  status: AiSessionStatus;
+  workflowStep?: string;
+}
+
+export interface AiEscalation {
+  id: string;
+  conversationId: string;
+  reason: string;
+  createdAt: string;
+  status: 'pending' | 'resolved';
+}
+
+export type WorkflowExecutionStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface WorkflowExecutionStepLog {
+  id: string;
+  title: string;
+  status: WorkflowExecutionStatus;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface WorkflowExecution {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: WorkflowExecutionStatus;
+  triggeredAt: string;
+  conversationId?: string;
+  ticketId?: string;
+  steps: WorkflowExecutionStepLog[];
+}
+
+export interface MessageTemplate {
+  id: string;
+  title: string;
+  content: string;
+  category?: string;
+}
+
+export interface AgentProfile {
+  id: string;
+  userId: string;
+  teamIds: string[];
+  /** Shares @easydev/types' PresenceStatus vocabulary (ONLINE/AWAY/BUSY/OFFLINE) - the
+   * same one the availability and realtime-presence APIs use. */
+  presenceStatus: PresenceStatusValue;
+  maxConcurrentConversations: number;
 }
