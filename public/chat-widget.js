@@ -183,7 +183,7 @@
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       const apiUrl = isLocal ? 'http://localhost:3000' : 'https://api.easydev.com';
 
-      const response = await fetch(\`\${apiUrl}/v1/channels/website-chat/webhook\`, {
+      const response = await fetch(`\${apiUrl}/v1/channels/website-chat/webhook\`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
