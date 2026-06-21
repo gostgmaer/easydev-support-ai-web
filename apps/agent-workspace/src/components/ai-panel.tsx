@@ -7,6 +7,7 @@ import {
   AiEscalationBanner,
   AiApprovalPanel,
 } from '@easydev/ui';
+import { Badge } from '@easydev/ui/Badge';
 import { Can } from '@easydev/permissions';
 import { useConversationStore } from '../store/conversationStore';
 import { useInboxStore } from '../store/inboxStore';
