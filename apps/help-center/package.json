@@ -18,6 +18,7 @@
     "@easydev/permissions": "workspace:*",
     "@easydev/stores": "workspace:*",
     "@easydev/types": "workspace:*",
+    "@easydev/ui": "workspace:*",
     "@easydev/utils": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
     "lucide-react": "^0.468.0",

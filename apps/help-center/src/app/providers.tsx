@@ -6,6 +6,7 @@ import { PermissionProvider } from '@easydev/permissions';
 import { FeatureFlagProvider } from '@easydev/feature-flags';
 import { AnalyticsProvider } from '@easydev/analytics';
 import { ThemeProvider, TenantBrandingProvider } from '@easydev/design-system';
+import { ApiProvider } from '@easydev/api-client';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333';
 
@@ -17,20 +18,24 @@ function TenantBrandingBridge({ children }: { children: React.ReactNode }) {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const apiConfig = React.useMemo(
+    () => ({ baseUrl: `${API_BASE_URL}/api`, getTenantId: () => null }),
+    []
+  );
+
   return (
     <ThemeProvider>
-      {/* No onUnauthenticated redirect here: articles stay public, only /account gates on
-          auth (via RequireAuth on that page), so an expired/missing session must never bounce
-          a visitor away from whatever public article they're reading. */}
-      <AuthProvider baseUrl={API_BASE_URL}>
-        <TenantBrandingBridge>
-          <PermissionProvider>
-            <FeatureFlagProvider>
-              <AnalyticsProvider app="help-center">{children}</AnalyticsProvider>
-            </FeatureFlagProvider>
-          </PermissionProvider>
-        </TenantBrandingBridge>
-      </AuthProvider>
+      <ApiProvider config={apiConfig}>
+        <AuthProvider baseUrl={API_BASE_URL}>
+          <TenantBrandingBridge>
+            <PermissionProvider>
+              <FeatureFlagProvider>
+                <AnalyticsProvider app="help-center">{children}</AnalyticsProvider>
+              </FeatureFlagProvider>
+            </PermissionProvider>
+          </TenantBrandingBridge>
+        </AuthProvider>
+      </ApiProvider>
     </ThemeProvider>
   );
 }

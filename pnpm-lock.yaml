@@ -287,6 +287,9 @@ importers:
       '@easydev/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@easydev/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@easydev/utils':
         specifier: workspace:*
         version: link:../../packages/utils
