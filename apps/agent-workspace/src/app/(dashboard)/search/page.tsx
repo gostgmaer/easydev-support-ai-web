@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, MessageSquare, Ticket, User, ArrowRight, History } from 'lucide-react';
 import { useSearchStore } from '../../../store/searchStore';
 import { useInboxStore } from '../../../store/inboxStore';
+import { useConversationSearch, useTicketSearch, useCustomerSearch } from '../../../hooks/useQueries';
 
 interface SearchResultItem {
   id: string;
@@ -19,47 +20,57 @@ export default function SearchPage() {
   const { query, setQuery, category, setCategory, recentSearches, addRecentSearch, clearRecentSearches } = useSearchStore();
   const setActiveConversationId = useInboxStore((state) => state.setActiveConversationId);
 
-  // Mock static search corpus to guarantee results compile & search matching
-  const searchCorpus: SearchResultItem[] = [
-    {
-      id: 'conv-101',
-      type: 'conversation',
-      title: 'Refund Request for Order #1002',
-      subtitle: 'Customer: Alice Vance • Status: Open',
-      link: '/conversations/conv-101',
-    },
-    {
-      id: 'conv-102',
-      type: 'conversation',
-      title: 'Login Failures via Google Auth',
-      subtitle: 'Customer: Bob Miller • Status: Escalated',
-      link: '/conversations/conv-102',
-    },
-    {
-      id: 'nct-98',
-      type: 'ticket',
-      title: 'Shopify Webhook Timeout - NCT-98',
-      subtitle: 'Priority: Urgent • Status: Open',
-      link: '/tickets/nct-98',
-    },
-    {
-      id: 'cust-201',
-      type: 'customer',
-      title: 'Alice Vance',
-      subtitle: 'alice.vance@example.com • Segment: VIP',
-      link: '/customers/cust-201',
-    },
-  ];
+  // Debounce so typing doesn't fire 3 real searches per keystroke.
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(handle);
+  }, [query]);
 
-  const results = searchCorpus.filter((item) => {
-    const matchesQuery =
-      item.title.toLowerCase().includes(query.toLowerCase()) ||
-      item.subtitle.toLowerCase().includes(query.toLowerCase());
-    
-    if (!matchesQuery) return false;
-    if (category === 'all') return true;
-    return item.type === category.slice(0, -1); // convert plural to singular ('tickets' -> 'ticket')
-  });
+  const searchConversations = category === 'all' || category === 'conversations';
+  const searchTickets = category === 'all' || category === 'tickets';
+  const searchCustomers = category === 'all' || category === 'customers';
+
+  const { data: conversations = [], isLoading: isLoadingConversations } = useConversationSearch(
+    searchConversations ? debouncedQuery : '',
+  );
+  const { data: tickets = [], isLoading: isLoadingTickets } = useTicketSearch(searchTickets ? debouncedQuery : '');
+  const { data: customers = [], isLoading: isLoadingCustomers } = useCustomerSearch(searchCustomers ? debouncedQuery : '');
+
+  const isLoading =
+    (searchConversations && isLoadingConversations) ||
+    (searchTickets && isLoadingTickets) ||
+    (searchCustomers && isLoadingCustomers);
+
+  const results: SearchResultItem[] = [
+    ...(searchConversations
+      ? conversations.map((c) => ({
+          id: c.id,
+          type: 'conversation' as const,
+          title: c.subject || 'Untitled conversation',
+          subtitle: `Customer: ${c.customerName} • Status: ${c.status}`,
+          link: `/conversations/${c.id}`,
+        }))
+      : []),
+    ...(searchTickets
+      ? tickets.map((t) => ({
+          id: t.id,
+          type: 'ticket' as const,
+          title: t.subject,
+          subtitle: `Priority: ${t.priority} • Status: ${t.status}`,
+          link: `/tickets/${t.id}`,
+        }))
+      : []),
+    ...(searchCustomers
+      ? customers.map((c) => ({
+          id: c.id,
+          type: 'customer' as const,
+          title: c.name,
+          subtitle: c.email,
+          link: `/customers/${c.id}`,
+        }))
+      : []),
+  ];
 
   const handleResultClick = (item: SearchResultItem) => {
     addRecentSearch(query);
@@ -113,16 +124,18 @@ export default function SearchPage() {
         {/* Search Results list */}
         <div className="lg:col-span-2 bg-white border border-neutral-200 rounded-lg p-6 shadow-xs space-y-4">
           <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">Search Results ({results.length})</h2>
-          
+
           {query.trim() === '' ? (
             <p className="text-xs text-neutral-400 italic text-center py-8">Type search query above to load matches.</p>
+          ) : isLoading ? (
+            <p className="text-xs text-neutral-400 italic text-center py-8">Searching...</p>
           ) : results.length > 0 ? (
             <div className="divide-y divide-neutral-100">
               {results.map((item) => {
                 const Icon = item.type === 'conversation' ? MessageSquare : item.type === 'ticket' ? Ticket : User;
                 return (
                   <div
-                    key={item.id}
+                    key={`${item.type}-${item.id}`}
                     onClick={() => handleResultClick(item)}
                     className="flex justify-between items-center py-3.5 hover:bg-neutral-50 px-2 rounded-md transition cursor-pointer"
                   >

@@ -4,26 +4,85 @@ import {
   useAdminStore,
   Connector,
   KnowledgeDocument,
+  KnowledgeCategory,
   WorkflowRule,
   IncidentAlert,
-  SystemMetric,
   Team,
   ApiKey,
+  CommunicationChannel,
 } from '../store/adminStore';
 import { useAuth } from '@easydev/auth';
 
-// 1. SYSTEM METRICS & DASHBOARD
-export function useDashboardMetrics() {
+// 1. DASHBOARD METRICS
+// There is no simple "platform KPI summary" endpoint - /v1/admin/dashboards is
+// a configurable-dashboard-builder API (widgets/layouts), a different feature.
+// The real KPI source is the same analytics endpoints the Analytics page uses.
+export function useActiveAgentsCount() {
   const apiClient = useApiClient();
-  const setMetrics = useAdminStore((state) => state.setMetrics);
-  return useQuery<SystemMetric>({
-    queryKey: ['admin', 'metrics'],
+  return useQuery<number>({
+    queryKey: ['admin', 'agents', 'active-count'],
     queryFn: async () => {
-      const data = await apiClient.get<SystemMetric>('/admin/metrics');
-      setMetrics(data);
-      return data;
+      const result = await apiClient.get<{ total: number }>('/v1/agents', {
+        query: { status: 'ACTIVE', limit: 1 },
+      });
+      return result.total;
     },
-    refetchInterval: 10000, // Refetch metrics every 10 seconds for real-time monitoring
+  });
+}
+
+export interface QueueStats {
+  name: string;
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+  paused: boolean;
+}
+
+export function useQueueStats() {
+  const apiClient = useApiClient();
+  return useQuery<QueueStats[]>({
+    queryKey: ['admin', 'health', 'queues'],
+    queryFn: () => apiClient.get<QueueStats[]>('/v1/admin/health/queues'),
+    refetchInterval: 15000,
+  });
+}
+
+export interface SystemHealthCheck {
+  id: string;
+  serviceName: string;
+  status: 'HEALTHY' | 'DEGRADED' | 'DOWN' | string;
+  latencyMs: number;
+  errorRate: number;
+  lastCheckAt: string;
+}
+
+export function useSystemHealthChecks() {
+  const apiClient = useApiClient();
+  return useQuery<SystemHealthCheck[]>({
+    queryKey: ['admin', 'health', 'services'],
+    queryFn: () => apiClient.get<SystemHealthCheck[]>('/v1/admin/health'),
+    refetchInterval: 15000,
+  });
+}
+
+export function useRunHealthSweep() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiClient.post<SystemHealthCheck[]>('/v1/admin/health/sweep'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'health', 'services'] });
+    },
+  });
+}
+
+export function useWorkflowMonitoring() {
+  const apiClient = useApiClient();
+  return useQuery<Record<string, number>>({
+    queryKey: ['admin', 'health', 'workflows'],
+    queryFn: () => apiClient.get<Record<string, number>>('/v1/admin/health/workflows'),
   });
 }
 
@@ -34,24 +93,26 @@ export function useConnectorsList() {
   return useQuery<Connector[]>({
     queryKey: ['admin', 'connectors'],
     queryFn: async () => {
-      const data = await apiClient.get<Connector[]>('/admin/connectors');
-      setConnectors(data);
-      return data;
+      const result = await apiClient.get<{ data: Connector[]; total: number }>('/v1/connectors');
+      setConnectors(result.data);
+      return result.data;
     },
   });
 }
 
-export function useUpdateConnector() {
+// The real backend models connector lifecycle as discrete actions
+// (activate/pause/disable), not an arbitrary PATCH {status}.
+export function useSetConnectorStatus() {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const updateStatus = useAdminStore((state) => state.updateConnectorStatus);
 
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: Connector['status'] }) => {
-      return apiClient.patch<Connector>(`/admin/connectors/${id}`, { status });
+    mutationFn: async ({ id, action }: { id: string; action: 'activate' | 'pause' | 'disable' }) => {
+      return apiClient.post<Connector>(`/v1/connectors/${id}/${action}`);
     },
-    onMutate: async ({ id, status }) => {
-      // Optimistic update
+    onMutate: async ({ id, action }) => {
+      const status = action === 'activate' ? 'ACTIVE' : action === 'pause' ? 'PAUSED' : 'DISABLED';
       updateStatus(id, status);
     },
     onSettled: () => {
@@ -61,16 +122,30 @@ export function useUpdateConnector() {
 }
 
 // 3. WORKFLOWS
+// "Workflows" in the admin UI maps to the real WorkflowTemplate aggregate
+// (v1/workflows/templates) - there's no separate "workflows" list endpoint;
+// templates are the activatable/pausable workflow definitions themselves.
 export function useWorkflowsList() {
   const apiClient = useApiClient();
   const setWorkflows = useAdminStore((state) => state.setWorkflows);
   return useQuery<WorkflowRule[]>({
     queryKey: ['admin', 'workflows'],
     queryFn: async () => {
-      const data = await apiClient.get<WorkflowRule[]>('/admin/workflows');
+      const data = await apiClient.get<WorkflowRule[]>('/v1/workflows/templates');
       setWorkflows(data);
       return data;
     },
+  });
+}
+
+export function useWorkflowExecutions(workflowId?: string) {
+  const apiClient = useApiClient();
+  return useQuery({
+    queryKey: ['admin', 'workflow-executions', workflowId],
+    queryFn: () =>
+      apiClient.get<Record<string, unknown>[]>('/v1/workflows/executions', {
+        query: workflowId ? { workflowId } : undefined,
+      }),
   });
 }
 
@@ -80,8 +155,9 @@ export function useToggleWorkflow() {
   const toggle = useAdminStore((state) => state.toggleWorkflowStatus);
 
   return useMutation({
-    mutationFn: async ({ id }: { id: string }) => {
-      return apiClient.post<WorkflowRule>(`/admin/workflows/${id}/toggle`);
+    mutationFn: async ({ id, status }: { id: string; status: WorkflowRule['status'] }) => {
+      const action = status === 'ACTIVE' ? 'pause' : 'activate';
+      return apiClient.post<WorkflowRule>(`/v1/workflows/templates/${id}/${action}`);
     },
     onMutate: async ({ id }) => {
       toggle(id);
@@ -99,28 +175,116 @@ export function useKnowledgeDocuments() {
   return useQuery<KnowledgeDocument[]>({
     queryKey: ['admin', 'documents'],
     queryFn: async () => {
-      const data = await apiClient.get<KnowledgeDocument[]>('/admin/knowledge/documents');
-      setDocuments(data);
-      return data;
+      const result = await apiClient.get<{ data: KnowledgeDocument[]; total: number }>('/v1/knowledge-documents');
+      setDocuments(result.data);
+      return result.data;
     },
   });
 }
 
-export function useImportKnowledge() {
+// Creating a document requires a pre-existing knowledge source (sourceId) -
+// source management (v1/knowledge-sources) isn't wired into this UI yet, so
+// there's no useImportKnowledge mutation here until that prerequisite exists.
+
+export function useDeleteKnowledgeDocument() {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
-  const addDoc = useAdminStore((state) => state.addDocument);
+  const removeDoc = useAdminStore((state) => state.removeDocument);
 
   return useMutation({
-    mutationFn: async (variables: { title: string; sourceType: KnowledgeDocument['sourceType']; fileUrl?: string; webUrl?: string }) => {
-      return apiClient.post<KnowledgeDocument>('/admin/knowledge/import', variables);
+    mutationFn: async ({ id }: { id: string }) => {
+      await apiClient.delete<void>(`/v1/knowledge-documents/${id}`);
+      return id;
     },
-    onSuccess: (data) => {
-      addDoc(data);
+    onMutate: async ({ id }) => {
+      removeDoc(id);
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'documents'] });
     },
+  });
+}
+
+export function useKnowledgeCategories() {
+  const apiClient = useApiClient();
+  return useQuery<KnowledgeCategory[]>({
+    queryKey: ['admin', 'knowledge-categories'],
+    queryFn: async () => {
+      const result = await apiClient.get<{ data: KnowledgeCategory[]; total: number }>('/v1/knowledge-categories');
+      return result.data;
+    },
+  });
+}
+
+// 4a. CHANNELS
+export function useChannelsList() {
+  const apiClient = useApiClient();
+  return useQuery<CommunicationChannel[]>({
+    queryKey: ['admin', 'channels'],
+    queryFn: async () => {
+      const result = await apiClient.get<{ data: CommunicationChannel[]; total: number }>('/v1/channels');
+      return result.data;
+    },
+  });
+}
+
+export function useSetChannelEnabled() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      await apiClient.put<void>(`/v1/channels/${id}/${enabled ? 'enable' : 'disable'}`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'channels'] });
+    },
+  });
+}
+
+// 4a-2. AUDIT LOG
+export interface AuditLogRecord {
+  id: string;
+  userId: string | null;
+  action: string;
+  details: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+export function useAuditLog() {
+  const apiClient = useApiClient();
+  return useQuery<{ data: AuditLogRecord[]; total: number }>({
+    queryKey: ['admin', 'audit', 'entities'],
+    queryFn: () => apiClient.get<{ data: AuditLogRecord[]; total: number }>('/v1/admin/audit/entities', { query: { limit: 50 } }),
+  });
+}
+
+// 4b. AI SETTINGS
+export interface AiSettings {
+  confidenceThreshold: number;
+  escalationThreshold: number;
+  allowedLanguages?: string[];
+  defaultLanguage?: string;
+  autoResponseEnabled: boolean;
+  autoEscalationEnabled: boolean;
+  costLimitDaily?: number;
+  costLimitMonthly?: number;
+}
+
+export function useAiSettings() {
+  const apiClient = useApiClient();
+  return useQuery<AiSettings>({
+    queryKey: ['admin', 'ai-settings'],
+    queryFn: () => apiClient.get<AiSettings>('/v1/settings/ai'),
+  });
+}
+
+export function useUpdateAiSettings() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: Partial<AiSettings>) => apiClient.put<AiSettings>('/v1/settings/ai', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'ai-settings'] }),
   });
 }
 
@@ -353,3 +517,121 @@ export function useTriggerAnalyticsExport() {
     },
   });
 }
+
+// 9. TENANT SETTINGS
+export interface TenantSettings {
+  tenantName?: string;
+  timezone?: string;
+  locale?: string;
+  country?: string;
+  currency?: string;
+  supportEmail?: string;
+  supportPhone?: string;
+  websiteUrl?: string;
+}
+
+export interface BrandingSettings {
+  logoUrl?: string;
+  faviconUrl?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  themeMode?: string;
+}
+
+export interface BusinessHoursEntry {
+  id: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isOpen: boolean;
+  timezone: string;
+}
+
+export interface HolidayEntry {
+  id: string;
+  holidayName: string;
+  holidayDate: string;
+  isRecurring: boolean;
+  country?: string;
+}
+
+export interface SecuritySettings {
+  sessionTimeout?: number;
+  ipWhitelist?: string[];
+  mfaRequired?: boolean;
+  apiKeyRotationDays?: number;
+  auditRetentionDays?: number;
+}
+
+export interface FeatureFlagEntry {
+  id: string;
+  featureKey: string;
+  enabled: boolean;
+  rolloutPercentage: number;
+}
+
+export interface UsageLimits {
+  maxAgents?: number;
+  maxConversations?: number;
+  maxMessages?: number;
+  maxWorkflows?: number;
+  maxConnectors?: number;
+  maxDocuments?: number;
+  maxStorage?: number;
+  maxAiRequests?: number;
+}
+
+function settingsQuery<T>(key: string, path: string) {
+  return function useSettingsQuery() {
+    const apiClient = useApiClient();
+    return useQuery<T>({
+      queryKey: ['admin', 'settings', key],
+      queryFn: () => apiClient.get<T>(path),
+    });
+  };
+}
+
+function settingsMutation<TDto>(key: string, path: string, method: 'put' | 'post' = 'put') {
+  return function useSettingsMutation() {
+    const apiClient = useApiClient();
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: (dto: TDto) => apiClient[method]<unknown>(path, dto),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'settings', key] }),
+    });
+  };
+}
+
+export const useTenantSettings = settingsQuery<TenantSettings>('general', '/v1/settings');
+export const useUpdateTenantSettings = settingsMutation<Partial<TenantSettings>>('general', '/v1/settings');
+
+export const useBranding = settingsQuery<BrandingSettings>('branding', '/v1/settings/branding');
+export const useUpdateBranding = settingsMutation<Partial<BrandingSettings>>('branding', '/v1/settings/branding');
+
+export const useBusinessHours = settingsQuery<BusinessHoursEntry[]>('business-hours', '/v1/settings/business-hours');
+export const useSaveBusinessHours = settingsMutation<Omit<BusinessHoursEntry, 'id'>>('business-hours', '/v1/settings/business-hours', 'post');
+
+export const useHolidays = settingsQuery<HolidayEntry[]>('holidays', '/v1/settings/holidays');
+export const useSaveHoliday = settingsMutation<Omit<HolidayEntry, 'id'>>('holidays', '/v1/settings/holidays', 'post');
+
+export function useDeleteHoliday() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/settings/holidays/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'holidays'] }),
+  });
+}
+
+export const useSecuritySettings = settingsQuery<SecuritySettings>('security', '/v1/settings/security');
+export const useUpdateSecuritySettings = settingsMutation<Partial<SecuritySettings>>('security', '/v1/settings/security');
+
+export const useFeatureFlags = settingsQuery<FeatureFlagEntry[]>('feature-flags', '/v1/settings/feature-flags');
+export const useSaveFeatureFlag = settingsMutation<{ featureKey: string; enabled: boolean; rolloutPercentage: number }>(
+  'feature-flags',
+  '/v1/settings/feature-flags',
+  'post',
+);
+
+export const useUsageLimits = settingsQuery<UsageLimits>('usage-limits', '/v1/settings/usage-limits');
+export const useUpdateUsageLimits = settingsMutation<Partial<UsageLimits>>('usage-limits', '/v1/settings/usage-limits');

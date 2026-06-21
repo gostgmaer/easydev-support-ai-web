@@ -1,7 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { useDashboardMetrics, useIncidentsAlerts } from '@/hooks/useAdminQueries';
+import {
+  useAnalyticsDashboard,
+  useAnalyticsAiMetrics,
+  useActiveAgentsCount,
+  useIncidentsAlerts,
+  useQueueStats,
+  useSystemHealthChecks,
+} from '@/hooks/useAdminQueries';
 import {
   MessageSquare,
   Ticket,
@@ -14,8 +21,13 @@ import {
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
-  const { data: metrics, isLoading: isMetricsLoading } = useDashboardMetrics();
+  const { data: metrics, isLoading: isMetricsLoading } = useAnalyticsDashboard('Last 30 Days');
+  const { data: aiMetrics } = useAnalyticsAiMetrics('Last 30 Days');
+  const { data: activeAgentsCount } = useActiveAgentsCount();
   const { data: incidents = [], isLoading: isIncidentsLoading } = useIncidentsAlerts();
+  const { data: queues = [], isLoading: isQueuesLoading } = useQueueStats();
+  const { data: healthChecks = [], isLoading: isHealthChecksLoading } = useSystemHealthChecks();
+  const isHealthLoading = isQueuesLoading || isHealthChecksLoading;
 
   const getMetricCard = (title: string, value: string | number, desc: string, icon: React.ComponentType<{ className?: string }>, color: string) => {
     const Icon = icon;
@@ -56,29 +68,29 @@ export default function AdminDashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {getMetricCard(
             'Active Conversations',
-            metrics?.conversationsCount ?? 1420,
-            'Live customer chat threads',
+            metrics?.conversationsCount ?? 0,
+            'Conversations in the last 30 days',
             MessageSquare,
             'text-primary-500 bg-primary-50'
           )}
           {getMetricCard(
             'SLA Compliance',
-            `${metrics?.slaCompliance ?? 96.5}%`,
+            `${metrics ? (100 - metrics.slaViolationRate).toFixed(1) : '0.0'}%`,
             'Response threshold targets',
             Clock,
             'text-success bg-success/15'
           )}
           {getMetricCard(
             'AI Deflection Rate',
-            `${metrics?.aiDeflectionRate ?? 42.1}%`,
+            `${aiMetrics ? aiMetrics.aiResolutionRate.toFixed(1) : '0.0'}%`,
             'Self-resolved by copilot agent',
             Sparkles,
             'text-cyan-600 bg-cyan-50'
           )}
           {getMetricCard(
             'Active Agents',
-            metrics?.activeAgentsCount ?? 45,
-            'Support agents currently online',
+            activeAgentsCount ?? 0,
+            'Agents enabled on this tenant',
             Bot,
             'text-info bg-info/15'
           )}
@@ -127,18 +139,33 @@ export default function AdminDashboardPage() {
           </h2>
 
           <div className="space-y-3.5 text-xs text-neutral-600">
-            <div className="flex justify-between items-center py-1.5 border-b border-neutral-100">
-              <span>BullMQ Queue Status</span>
-              <span className="text-success font-semibold">Healthy (0 Backlogged)</span>
-            </div>
-            <div className="flex justify-between items-center py-1.5 border-b border-neutral-100">
-              <span>Redis Cluster Hit Rate</span>
-              <span className="text-neutral-900 font-bold">99.2%</span>
-            </div>
-            <div className="flex justify-between items-center py-1.5 border-b border-neutral-100">
-              <span>Database CPU Load</span>
-              <span className="text-neutral-900 font-semibold">12.4%</span>
-            </div>
+            {isHealthLoading ? (
+              <p className="text-neutral-400 italic py-2">Loading health checks...</p>
+            ) : (
+              <>
+                {(() => {
+                  const totalBacklogged = queues.reduce((sum, q) => sum + q.waiting + q.failed, 0);
+                  return (
+                    <div className="flex justify-between items-center py-1.5 border-b border-neutral-100">
+                      <span>BullMQ Queue Status</span>
+                      <span className={totalBacklogged === 0 ? 'text-success font-semibold' : 'text-warning font-semibold'}>
+                        {totalBacklogged === 0 ? 'Healthy' : `${totalBacklogged} backlogged`}
+                      </span>
+                    </div>
+                  );
+                })()}
+                {healthChecks.map((check) => (
+                  <div key={check.id} className="flex justify-between items-center py-1.5 border-b border-neutral-100">
+                    <span className="capitalize">{check.serviceName.replace(/-/g, ' ')}</span>
+                    <span className={`font-semibold ${
+                      check.status === 'HEALTHY' ? 'text-success' : check.status === 'DEGRADED' ? 'text-warning' : 'text-danger'
+                    }`}>
+                      {check.status} • {check.latencyMs}ms
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
       </div>

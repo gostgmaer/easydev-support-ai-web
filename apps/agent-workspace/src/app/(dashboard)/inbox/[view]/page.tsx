@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { use, useEffect } from 'react';
 import { notFound } from 'next/navigation';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@easydev/ui';
 import { useInboxStore, type InboxView } from '../../../../store/inboxStore';
@@ -10,11 +10,12 @@ import { ConversationDetail } from '../../../../components/conversation-detail';
 
 const VALID_VIEWS: InboxView[] = ['my', 'team', 'unassigned', 'escalated', 'bookmarks', 'snoozed'];
 
-export default function InboxViewPage({ params }: { params: { view: string } }) {
-  if (!VALID_VIEWS.includes(params.view as InboxView)) {
+export default function InboxViewPage({ params }: { params: Promise<{ view: string }> }) {
+  const { view: viewParam } = use(params);
+  if (!VALID_VIEWS.includes(viewParam as InboxView)) {
     notFound();
   }
-  const view = params.view as InboxView;
+  const view = viewParam as InboxView;
 
   const setSelectedView = useInboxStore((state) => state.setSelectedView);
   const filters = useInboxStore((state) => state.filters);

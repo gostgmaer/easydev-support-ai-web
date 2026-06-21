@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { use } from 'react';
 import Link from 'next/link';
 import { ShoppingBag } from 'lucide-react';
 import { CustomerSidebar, Tabs, TabsList, TabsTrigger, TabsContent, Badge, NoTicketsEmptyState, NoConversationsEmptyState } from '@easydev/ui';
@@ -8,8 +8,8 @@ import { useCustomerDetails, useCustomerConversations, useCustomerTickets } from
 import { useCustomerStore } from '../../../../store/customerStore';
 import { toCustomerProfile } from '../../../../lib/ui-adapters';
 
-export default function CustomerDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const { isLoading } = useCustomerDetails(id);
   const customer = useCustomerStore((state) => state.customers[id]);
   const { data: conversations = [] } = useCustomerConversations(id);

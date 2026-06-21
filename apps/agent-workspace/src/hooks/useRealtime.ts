@@ -6,6 +6,7 @@ import { useInboxStore } from '../store/inboxStore';
 import { useConversationStore } from '../store/conversationStore';
 import { useTicketStore } from '../store/ticketStore';
 import { useAiStore } from '../store/aiStore';
+import { useNotificationStore } from '../store/notificationStore';
 import {
   Conversation,
   ConversationStatus,
@@ -136,6 +137,8 @@ export function useRealtime(agentId?: string) {
   const addAiEscalation = useAiStore((state) => state.addEscalation);
   const resolveAiEscalation = useAiStore((state) => state.resolveEscalation);
 
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
   const token = useAuthStore((state) => state.tokens?.accessToken);
   const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000';
 
@@ -176,6 +179,20 @@ export function useRealtime(agentId?: string) {
         const { conversationId, assignedAgentId } = msg.data;
         updateConversation(conversationId, { assignedAgentId });
         queryClient.invalidateQueries({ queryKey: ['inbox'] });
+        // No dedicated notification feed exists on the backend - derive one
+        // from the real assignment event, scoped to assignments landing on
+        // this agent specifically (not every assignment tenant-wide).
+        if (agentId && assignedAgentId === agentId) {
+          addNotification({
+            id: `assignment-${conversationId}-${msg.timestamp}`,
+            title: 'Conversation assigned to you',
+            description: 'A conversation was just assigned to you.',
+            type: 'assignment',
+            read: false,
+            createdAt: msg.timestamp,
+            referenceId: conversationId,
+          });
+        }
       },
     );
 
@@ -273,6 +290,18 @@ export function useRealtime(agentId?: string) {
           resolveAiEscalation(escalation.id);
         } else {
           addAiEscalation(escalation);
+          // Escalations aren't assignee-specific (any agent can pick one up),
+          // so unlike assignments this notifies tenant-wide - matches who the
+          // backend actually broadcasts the event to.
+          addNotification({
+            id: `escalation-${escalation.id}`,
+            title: 'AI escalation needs attention',
+            description: escalation.reason,
+            type: 'escalation',
+            read: false,
+            createdAt: escalation.createdAt,
+            referenceId: escalation.conversationId,
+          });
         }
         queryClient.invalidateQueries({ queryKey: ['ai-escalations'] });
       },
@@ -316,6 +345,7 @@ export function useRealtime(agentId?: string) {
     };
   }, [
     socket,
+    agentId,
     queryClient,
     updatePresence,
     setTyping,
@@ -324,6 +354,7 @@ export function useRealtime(agentId?: string) {
     setAiSession,
     addAiEscalation,
     resolveAiEscalation,
+    addNotification,
   ]);
 
   // Emitters - match InboxRealtimeService's @SubscribeMessage handlers exactly.

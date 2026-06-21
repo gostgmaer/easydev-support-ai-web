@@ -2,22 +2,18 @@
 
 import * as React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Activity, ShieldCheck, AlertTriangle, RefreshCw, Server, Cpu } from 'lucide-react';
-import { useIncidentsAlerts, useResolveIncident } from '@/hooks/useAdminQueries';
-
-interface AuditLogItem {
-  id: string;
-  actor: string;
-  action: string;
-  ipAddress: string;
-  timestamp: string;
-}
+import { Activity, AlertTriangle, Server, Cpu } from 'lucide-react';
+import { useIncidentsAlerts, useResolveIncident, useQueueStats, useSystemHealthChecks, useAuditLog } from '@/hooks/useAdminQueries';
 
 export default function SystemHealthPage() {
   const router = useRouter();
   const pathname = usePathname();
   const { data: incidents = [], isLoading } = useIncidentsAlerts();
   const resolveMutation = useResolveIncident();
+  const { data: queues = [], isLoading: isQueuesLoading } = useQueueStats();
+  const { data: healthChecks = [], isLoading: isHealthLoading } = useSystemHealthChecks();
+  const { data: auditResult, isLoading: isAuditLoading } = useAuditLog();
+  const auditLogs = auditResult?.data ?? [];
 
   const [activeTab, setActiveTab] = React.useState<'health' | 'audit' | 'incidents'>('health');
 
@@ -39,12 +35,6 @@ export default function SystemHealthPage() {
       router.push(`/${tab}`);
     }
   };
-
-  const auditLogs: AuditLogItem[] = [
-    { id: 'aud-1', actor: 'John Doe (Admin)', action: 'Generated API Key: CRM Sync Pipeline', ipAddress: '192.168.1.152', timestamp: '2026-06-21 12:14:02' },
-    { id: 'aud-2', actor: 'System Auto-Governor', action: 'Triggered SLA Alert: NCT-98', ipAddress: '127.0.0.1', timestamp: '2026-06-21 11:45:00' },
-    { id: 'aud-3', actor: 'Jane Smith (Manager)', action: 'Modified Team Member: John Doe', ipAddress: '192.168.1.180', timestamp: '2026-06-20 09:30:15' },
-  ];
 
   return (
     <div className="space-y-6" role="region" aria-label="Operations Center Panel">
@@ -79,66 +69,75 @@ export default function SystemHealthPage() {
         {activeTab === 'health' && (
           <div className="space-y-6">
             <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">Platform Performance Stats</h2>
-            
-            {/* Health parameters grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="p-4 border border-neutral-200 rounded-lg space-y-2 text-xs">
-                <span className="font-bold text-neutral-800 flex items-center gap-1">
-                  <Server className="h-4 w-4 text-primary-500" />
-                  <span>Postgres Database Load</span>
-                </span>
-                <span className="text-lg font-extrabold text-neutral-900 block">12.4%</span>
-                <span className="text-[10px] text-neutral-500">Connections: 42 active</span>
-              </div>
 
-              <div className="p-4 border border-neutral-200 rounded-lg space-y-2 text-xs">
-                <span className="font-bold text-neutral-800 flex items-center gap-1">
-                  <Cpu className="h-4 w-4 text-cyan-500" />
-                  <span>Redis Memory Utilization</span>
-                </span>
-                <span className="text-lg font-extrabold text-neutral-900 block">34.2 MB / 512 MB</span>
-                <span className="text-[10px] text-neutral-500">Eviction Rate: 0.0%</span>
+            {isQueuesLoading || isHealthLoading ? (
+              <p className="text-center text-xs text-neutral-400 animate-pulse py-8">Loading health checks...</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {healthChecks.map((check) => (
+                  <div key={check.id} className="p-4 border border-neutral-200 rounded-lg space-y-2 text-xs">
+                    <span className="font-bold text-neutral-800 flex items-center gap-1 capitalize">
+                      <Server className="h-4 w-4 text-primary-500" />
+                      <span>{check.serviceName.replace(/-/g, ' ')}</span>
+                    </span>
+                    <span className={`text-lg font-extrabold block ${
+                      check.status === 'HEALTHY' ? 'text-success' : check.status === 'DEGRADED' ? 'text-warning' : 'text-danger'
+                    }`}>
+                      {check.status}
+                    </span>
+                    <span className="text-[10px] text-neutral-500">Latency: {check.latencyMs}ms • Errors: {(check.errorRate * 100).toFixed(1)}%</span>
+                  </div>
+                ))}
+                {queues.map((q) => (
+                  <div key={q.name} className="p-4 border border-neutral-200 rounded-lg space-y-2 text-xs">
+                    <span className="font-bold text-neutral-800 flex items-center gap-1 capitalize">
+                      <Cpu className="h-4 w-4 text-cyan-500" />
+                      <span>{q.name.replace(/-/g, ' ')} Queue</span>
+                    </span>
+                    <span className={`text-lg font-extrabold block ${q.failed === 0 ? 'text-success' : 'text-danger'}`}>
+                      {q.active} active
+                    </span>
+                    <span className="text-[10px] text-neutral-500">Waiting: {q.waiting} • Failed: {q.failed} • {q.paused ? 'Paused' : 'Running'}</span>
+                  </div>
+                ))}
               </div>
-
-              <div className="p-4 border border-neutral-200 rounded-lg space-y-2 text-xs">
-                <span className="font-bold text-neutral-800 flex items-center gap-1">
-                  <Activity className="h-4 w-4 text-success" />
-                  <span>BullMQ Active Workers</span>
-                </span>
-                <span className="text-lg font-extrabold text-neutral-900 block">6 / 6 online</span>
-                <span className="text-[10px] text-neutral-500">Backlogged jobs: 0</span>
-              </div>
-            </div>
+            )}
           </div>
         )}
 
         {/* 2. AUDIT LOGS TAB */}
         {activeTab === 'audit' && (
           <div className="space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">Security Access & Modification Logs</h2>
-            
-            <div className="overflow-x-auto border border-neutral-100 rounded-lg text-xs">
-              <table className="w-full text-left divide-y divide-neutral-100">
-                <thead className="bg-neutral-50 font-bold text-neutral-500">
-                  <tr>
-                    <th className="p-3">Actor / Agent</th>
-                    <th className="p-3">Action Description</th>
-                    <th className="p-3">IP Address</th>
-                    <th className="p-3 text-right">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100 text-neutral-700">
-                  {auditLogs.map((log) => (
-                    <tr key={log.id}>
-                      <td className="p-3 font-semibold text-neutral-800">{log.actor}</td>
-                      <td className="p-3">{log.action}</td>
-                      <td className="p-3 font-mono text-neutral-500">{log.ipAddress}</td>
-                      <td className="p-3 text-right font-semibold text-neutral-500">{log.timestamp}</td>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">Entity Change Audit Log</h2>
+
+            {isAuditLoading ? (
+              <p className="text-center text-xs text-neutral-400 animate-pulse py-8">Loading audit log...</p>
+            ) : auditLogs.length > 0 ? (
+              <div className="overflow-x-auto border border-neutral-100 rounded-lg text-xs">
+                <table className="w-full text-left divide-y divide-neutral-100">
+                  <thead className="bg-neutral-50 font-bold text-neutral-500">
+                    <tr>
+                      <th className="p-3">User</th>
+                      <th className="p-3">Action</th>
+                      <th className="p-3">IP Address</th>
+                      <th className="p-3 text-right">Timestamp</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100 text-neutral-700">
+                    {auditLogs.map((log) => (
+                      <tr key={log.id}>
+                        <td className="p-3 font-semibold text-neutral-800">{log.userId || 'System'}</td>
+                        <td className="p-3">{log.action}{log.details ? ` — ${log.details}` : ''}</td>
+                        <td className="p-3 font-mono text-neutral-500">{log.ipAddress || '—'}</td>
+                        <td className="p-3 text-right font-semibold text-neutral-500">{new Date(log.createdAt).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-400 italic py-8 text-center">No audit events recorded yet.</p>
+            )}
           </div>
         )}
 

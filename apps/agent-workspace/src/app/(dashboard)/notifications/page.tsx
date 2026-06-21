@@ -1,29 +1,24 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, Check, Eye, AlertTriangle, UserCheck, Inbox } from 'lucide-react';
+import { Bell, Check, AlertTriangle, UserCheck, Inbox } from 'lucide-react';
 import { useNotificationStore } from '../../../store/notificationStore';
-import { useNotificationsList } from '../../../hooks/useQueries';
 import { useInboxStore } from '../../../store/inboxStore';
 import { Notification } from '../../../types';
 
+// No backend endpoint exists for a historical notifications feed - notifications
+// only ever arrive via realtime events (see useRealtime.ts), so this page is
+// purely a view over whatever notificationStore has accumulated this session.
 export default function NotificationsPage() {
   const router = useRouter();
-  const { notifications, setNotifications, markAsRead, markAllAsRead } = useNotificationStore();
+  const { notifications, markAsRead, markAllAsRead } = useNotificationStore();
   const setActiveConversationId = useInboxStore((state) => state.setActiveConversationId);
-  const { data: serverNotifications = [], isLoading } = useNotificationsList();
-
-  useEffect(() => {
-    if (serverNotifications.length > 0) {
-      setNotifications(serverNotifications);
-    }
-  }, [serverNotifications, setNotifications]);
 
   const handleNotificationClick = (n: Notification) => {
     markAsRead(n.id);
     if (n.referenceId) {
-      if (n.type === 'sla_risk' || n.type === 'assignment' || n.type === 'mention') {
+      if (n.type === 'sla_risk' || n.type === 'assignment' || n.type === 'mention' || n.type === 'escalation') {
         setActiveConversationId(n.referenceId);
         router.push('/inbox');
       } else {
@@ -73,11 +68,7 @@ export default function NotificationsPage() {
 
       {/* Notifications list Container */}
       <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs">
-        {isLoading ? (
-          <div className="py-12 text-center text-xs text-neutral-400 animate-pulse font-semibold">
-            Loading notifications history...
-          </div>
-        ) : notifications.length > 0 ? (
+        {notifications.length > 0 ? (
           <div className="divide-y divide-neutral-100">
             {notifications.map((n) => (
               <div

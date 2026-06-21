@@ -13,26 +13,42 @@ export interface SystemMetric {
 export interface Connector {
   id: string;
   name: string;
-  category: string;
-  status: 'active' | 'inactive' | 'error';
-  health: number;
-  logsCount: number;
+  connectorType: string;
+  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'DISABLED' | 'ERROR';
+  healthStatus: 'UNKNOWN' | 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY';
+  lastError?: string;
 }
 
 export interface KnowledgeDocument {
   id: string;
   title: string;
-  sourceType: 'website' | 'pdf' | 'faq';
-  status: 'published' | 'draft' | 'archived';
+  documentType: 'PDF' | 'DOCX' | 'TXT' | 'CSV' | 'MARKDOWN' | 'FAQ' | 'HTML' | 'WEBPAGE';
+  status: 'DRAFT' | 'PROCESSING' | 'INDEXING' | 'ACTIVE' | 'ARCHIVED' | 'FAILED';
   version: number;
+}
+
+export interface KnowledgeCategory {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface CommunicationChannel {
+  id: string;
+  name: string;
+  type: 'WHATSAPP' | 'EMAIL' | 'WEBCHAT' | 'TELEGRAM' | 'FACEBOOK' | 'INSTAGRAM' | 'SLACK' | 'TEAMS' | 'VOICE';
+  provider: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  isDefault: boolean;
 }
 
 export interface WorkflowRule {
   id: string;
   name: string;
-  trigger: string;
-  status: 'active' | 'draft';
-  executionCount: number;
+  description?: string;
+  workflowType: string;
+  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED' | 'FAILED' | 'COMPLETED';
+  isSystem: boolean;
 }
 
 export interface IncidentAlert {
@@ -85,6 +101,7 @@ interface AdminState {
   updateConnectorStatus: (id: string, status: Connector['status']) => void;
   setDocuments: (docs: KnowledgeDocument[]) => void;
   addDocument: (doc: KnowledgeDocument) => void;
+  removeDocument: (id: string) => void;
   setWorkflows: (workflows: WorkflowRule[]) => void;
   toggleWorkflowStatus: (id: string) => void;
   setIncidents: (incidents: IncidentAlert[]) => void;
@@ -125,11 +142,12 @@ export const useAdminStore = create<AdminState>((set) => ({
     })),
   setDocuments: (documents) => set({ documents }),
   addDocument: (doc) => set((state) => ({ documents: [doc, ...state.documents] })),
+  removeDocument: (id) => set((state) => ({ documents: state.documents.filter((d) => d.id !== id) })),
   setWorkflows: (workflows) => set({ workflows }),
   toggleWorkflowStatus: (id) =>
     set((state) => ({
       workflows: state.workflows.map((w) =>
-        w.id === id ? { ...w, status: w.status === 'active' ? 'draft' : 'active' } : w
+        w.id === id ? { ...w, status: w.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' } : w
       ),
     })),
   setIncidents: (incidents) => set({ incidents }),

@@ -6,11 +6,15 @@ import { usePathname } from 'next/navigation';
 import { MessageCircle, FileQuestion, StickyNote, History } from 'lucide-react';
 import { Avatar } from '@easydev/ui';
 import { useWidgetStore } from '../../store/widgetStore';
-import { useEnsureWidgetSession } from '../../hooks/useWidgetQueries';
+import { useEnsureWidgetSession, useWidgetBranding } from '../../hooks/useWidgetQueries';
 
 export default function WidgetWindowLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const config = useWidgetStore((state) => state.config);
+  // Public, no session token required - loads independently of (and usually
+  // before) the session bootstrap below so real tenant branding shows up
+  // immediately instead of the generic local defaults the whole time.
+  useWidgetBranding();
   // Bootstraps the anonymous visitor's session token once tenantId is known
   // (set by Providers' TenantIdSync) - every widget API/socket call needs it.
   // Can fail with 403 if the tenant has locked down embedding to specific

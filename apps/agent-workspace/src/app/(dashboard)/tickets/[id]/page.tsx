@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { use, useMemo, useState } from 'react';
 import { CheckCircle2, Link2, XCircle } from 'lucide-react';
 import { TicketSidebar, AuditTimeline, Section, type TimelineEntry } from '@easydev/ui';
 import { ConversationPriority, TicketApproval } from '../../../../types';
@@ -13,8 +13,8 @@ const SLA_COLORS: Record<string, string> = {
   breached: 'bg-danger/15 border-danger/20 text-danger font-bold',
 };
 
-export default function TicketDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function TicketDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const { data: ticket, isLoading } = useTicketDetails(id);
   const updateTicketMutation = useUpdateTicket();
   const addCommentMutation = useAddTicketComment();

@@ -221,6 +221,18 @@ export function useTicketSearch(q: string) {
   });
 }
 
+export function useCustomerSearch(q: string) {
+  const api = useApiClient();
+  return useQuery<Customer[]>({
+    queryKey: ['search-customers', q],
+    queryFn: async () => {
+      const result = await api.get<{ data: Customer[] }>('/v1/customers', { query: { search: q, limit: 20 } });
+      return result.data;
+    },
+    enabled: q.length > 1,
+  });
+}
+
 export function useTicketDetails(ticketId: string | null) {
   const api = useApiClient();
   const setTicket = useTicketStore((state) => state.setTicket);

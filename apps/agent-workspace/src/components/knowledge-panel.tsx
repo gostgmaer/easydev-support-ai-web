@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, FileText, Send, ArrowRight, BookOpen } from 'lucide-react';
-import { useKnowledgeSearch } from '../hooks/useQueries';
+import { useKnowledgeSearch } from '../hooks/useKnowledgeQueries';
 import { useConversationStore } from '../store/conversationStore';
 import { useInboxStore } from '../store/inboxStore';
 

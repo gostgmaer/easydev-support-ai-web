@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '@easydev/api-client';
-import { useWidgetStore, WidgetMessage } from '../store/widgetStore';
+import { useWidgetStore, WidgetMessage, WidgetConfig } from '../store/widgetStore';
 
 const ANONYMOUS_ID_KEY = 'easydev-widget-anonymous-id';
 
@@ -50,6 +50,43 @@ export function toWidgetMessage(raw: RawMessage): WidgetMessage {
       size: a.fileSize || 0,
     })),
   };
+}
+
+// 0. TENANT BRANDING
+// Public endpoint (no session token needed, only x-tenant-id) - loads before
+// the session bootstrap so the widget shows the tenant's real colors/name
+// immediately instead of generic placeholder defaults the whole time.
+interface WidgetConfigResponse {
+  widgetName: string;
+  primaryColor: string;
+  welcomeMessage?: string;
+  avatarUrl?: string;
+}
+
+export function useWidgetBranding() {
+  const apiClient = useApiClient();
+  const tenantId = useWidgetStore((state) => state.tenantId);
+  const setConfig = useWidgetStore((state) => state.setConfig);
+
+  return useQuery({
+    queryKey: ['widget', 'branding', tenantId],
+    queryFn: async () => {
+      const data = await apiClient.get<WidgetConfigResponse>('/v1/widget/config');
+      // Only patch fields the tenant actually configured - an absent
+      // welcomeMessage/avatarUrl should keep the local fallback, not get
+      // overwritten with undefined.
+      const patch: Partial<WidgetConfig> = {
+        primaryColor: data.primaryColor,
+        aiName: data.widgetName,
+      };
+      if (data.welcomeMessage) patch.welcomeMessage = data.welcomeMessage;
+      if (data.avatarUrl) patch.agentAvatar = data.avatarUrl;
+      setConfig(patch);
+      return data;
+    },
+    enabled: !!tenantId,
+    staleTime: 5 * 60 * 1000,
+  });
 }
 
 // 1. WIDGET SESSION
