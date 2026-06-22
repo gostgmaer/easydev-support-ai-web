@@ -1,81 +1,104 @@
-import React from 'react';
-import { Bot, Sparkles, AlertCircle, Play, Pause, RefreshCw, Check, Edit3, Trash2, Cpu } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bot, Pause, Play } from 'lucide-react';
+import {
+  AiStatusIndicator,
+  AiResponseCard,
+  AiToolCallViewer,
+  AiEscalationBanner,
+  AiApprovalPanel,
+} from '@easydev/ui';
+import { Badge } from '@easydev/ui/Badge';
+import { Can } from '@easydev/permissions';
 import { useConversationStore } from '../store/conversationStore';
 import { useInboxStore } from '../store/inboxStore';
-import { useUpdateAiStatus } from '../hooks/useQueries';
-import { Badge } from '@easydev/ui/src/Badge';
+import { useAiStore } from '../store/aiStore';
+import {
+  useAiSession,
+  useUpdateAiStatus,
+  useAiEscalations,
+  useResolveEscalation,
+  useGenerateAiDraft,
+} from '../hooks/useAiQueries';
+import { toAiApprovalRequest, toAiToolCall } from '../lib/ui-adapters';
 
 export function AiPanel() {
   const activeConversationId = useInboxStore((state) => state.activeConversationId);
   const conversations = useInboxStore((state) => state.conversations);
   const activeConv = conversations.find((c) => c.id === activeConversationId);
 
-  const aiDraft = useConversationStore((state) => {
-    if (!activeConversationId) return null;
-    return state.aiDrafts[activeConversationId] || null;
-  });
+  const aiDraft = useAiStore((state) => (activeConversationId ? state.drafts[activeConversationId] : null));
+  const setDraft = useConversationStore((state) => state.setDraft);
 
-  const setDraftText = useConversationStore((state) => state.setDraft);
-  const setAiDraft = useConversationStore((state) => state.setAiDraft);
+  const { data: session } = useAiSession(activeConversationId);
   const updateAiStatusMutation = useUpdateAiStatus();
+  const { data: escalations = [] } = useAiEscalations('pending');
+  const resolveEscalationMutation = useResolveEscalation();
+  const generateDraftMutation = useGenerateAiDraft();
+
+  const [editingContent, setEditingContent] = useState<string | null>(null);
 
   if (!activeConv) return null;
+
+  const conversationEscalation = escalations.find((e) => e.conversationId === activeConv.id);
 
   const handleStatusChange = (status: 'active' | 'paused' | 'takeover') => {
     updateAiStatusMutation.mutate({ conversationId: activeConv.id, status });
   };
 
-  const handleApplyDraft = () => {
-    if (aiDraft) {
-      setDraftText(activeConv.id, aiDraft.content);
+  const handleApplyDraft = (content: string) => setDraft(activeConv.id, content);
+
+  const handleEdit = (content: string) => setEditingContent(content);
+
+  const handleUseEditedDraft = () => {
+    if (editingContent !== null) {
+      setDraft(activeConv.id, editingContent);
+      setEditingContent(null);
     }
   };
 
-  const handleRejectDraft = () => {
-    setAiDraft(activeConv.id, null);
+  // No dedicated "escalate" endpoint exists - escalating manually means the agent takes
+  // over the conversation from the AI, which is the real, available action.
+  const handleEscalate = () => handleStatusChange('takeover');
+
+  // The backend only exposes resolving an escalation (no separate approve/reject) - both
+  // decisions map to the same resolve call, which is the closest real equivalent.
+  const handleEscalationDecision = () => {
+    if (conversationEscalation) resolveEscalationMutation.mutate(conversationEscalation.id);
   };
 
   return (
-    <div className="flex flex-col h-full bg-white divide-y divide-neutral-100 overflow-y-auto" aria-label="AI Assistant Panel">
-      {/* AI Controls Header */}
-      <div className="p-5 space-y-3">
+    <div className="flex h-full flex-col divide-y divide-neutral-100 overflow-y-auto bg-white" aria-label="AI Assistant Panel">
+      <div className="space-y-3 p-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-primary-600 font-semibold text-sm">
-            <Sparkles className="h-4.5 w-4.5 text-cyan-500 animate-pulse" />
-            <span>AI Copilot Status</span>
-          </div>
-          <Badge variant={activeConv.aiStatus === 'active' ? 'success' : activeConv.aiStatus === 'paused' ? 'warning' : 'secondary'}>
-            {activeConv.aiStatus.toUpperCase()}
-          </Badge>
+          <AiStatusIndicator status={session?.status ?? 'idle'} />
+          <Can resource="ai_agent" action="manage">
+            {activeConv.aiStatus === 'active' ? (
+              <button
+                onClick={() => handleStatusChange('paused')}
+                className="flex items-center gap-1.5 rounded border border-warning/30 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20"
+                aria-label="Pause AI copilot agent"
+              >
+                <Pause className="h-3.5 w-3.5" />
+                <span>Pause</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => handleStatusChange('active')}
+                className="flex items-center gap-1.5 rounded border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success hover:bg-success/20"
+                aria-label="Resume AI copilot agent"
+              >
+                <Play className="h-3.5 w-3.5" />
+                <span>Resume</span>
+              </button>
+            )}
+          </Can>
         </div>
 
-        {/* Action Toggle buttons */}
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          {activeConv.aiStatus === 'active' ? (
-            <button
-              onClick={() => handleStatusChange('paused')}
-              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-warning/30 bg-warning/10 text-warning hover:bg-warning/20 font-semibold rounded transition"
-              aria-label="Pause AI copilot agent"
-            >
-              <Pause className="h-3.5 w-3.5" />
-              <span>Pause AI Agent</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => handleStatusChange('active')}
-              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-success/30 bg-success/10 text-success hover:bg-success/20 font-semibold rounded transition"
-              aria-label="Resume AI copilot agent"
-            >
-              <Play className="h-3.5 w-3.5 animate-pulse" />
-              <span>Resume AI Agent</span>
-            </button>
-          )}
-
+        <Can resource="ai_agent" action="manage">
           {activeConv.aiStatus !== 'takeover' ? (
             <button
               onClick={() => handleStatusChange('takeover')}
-              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 font-semibold rounded transition"
-              aria-label="Take over conversation manually"
+              className="flex w-full items-center justify-center gap-1.5 rounded border border-primary-200 bg-primary-50 py-2 text-xs font-semibold text-primary-700 hover:bg-primary-100"
             >
               <Bot className="h-3.5 w-3.5" />
               <span>Manual Takeover</span>
@@ -83,86 +106,77 @@ export function AiPanel() {
           ) : (
             <button
               onClick={() => handleStatusChange('active')}
-              className="flex items-center justify-center gap-1.5 py-2 px-3 border border-neutral-300 bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-semibold rounded transition"
-              aria-label="Return conversation to AI agent"
+              className="flex w-full items-center justify-center gap-1.5 rounded border border-neutral-300 bg-neutral-100 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-200"
             >
               <Bot className="h-3.5 w-3.5" />
               <span>Hand Back to AI</span>
             </button>
           )}
-        </div>
+        </Can>
       </div>
 
-      {/* Suggested Draft Content Area */}
-      {aiDraft ? (
-        <div className="p-5 space-y-4">
-          <div className="flex justify-between items-center text-xs">
-            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Suggested Draft</span>
-            <div className="flex gap-2">
-              <span className="text-neutral-500 font-medium">${aiDraft.cost.toFixed(4)} cost</span>
-              <span className={`font-bold ${aiDraft.confidence >= 0.85 ? 'text-success' : 'text-warning'}`}>
-                {Math.round(aiDraft.confidence * 100)}% confidence
-              </span>
-            </div>
+      {conversationEscalation && (
+        <div className="p-4">
+          <AiEscalationBanner reason={conversationEscalation.reason} onAcknowledge={handleEscalationDecision} />
+          <div className="mt-2">
+            <AiApprovalPanel
+              request={toAiApprovalRequest(conversationEscalation)}
+              onDecision={handleEscalationDecision}
+              isSubmitting={resolveEscalationMutation.isPending}
+            />
           </div>
-
-          <div className="p-3 bg-gradient-to-br from-blue-50/30 to-cyan-50/30 border border-blue-200 rounded text-xs text-neutral-800 leading-relaxed font-medium">
-            {aiDraft.content}
-          </div>
-
-          {/* Draft Actions */}
-          <div className="flex gap-2 text-xs">
-            <button
-              onClick={handleApplyDraft}
-              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded shadow-xs transition"
-              aria-label="Apply suggested AI draft"
-            >
-              <Check className="h-3.5 w-3.5" />
-              <span>Apply Draft</span>
-            </button>
-            <button
-              onClick={handleRejectDraft}
-              className="p-1.5 border border-neutral-200 hover:bg-neutral-50 text-neutral-500 hover:text-danger rounded transition"
-              title="Reject draft suggestion"
-              aria-label="Reject draft suggestion"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="p-5 text-center text-neutral-400 text-xs">
-          <Bot className="h-8 w-8 text-neutral-300 mx-auto mb-2 animate-bounce" />
-          <p>No draft suggestion available yet.</p>
         </div>
       )}
 
-      {/* Tool Call Logs Viewer */}
-      {aiDraft && aiDraft.toolCalls && aiDraft.toolCalls.length > 0 && (
-        <div className="p-5 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
-            <Cpu className="h-4 w-4" />
-            <span>LLM Tool Executions</span>
-          </h3>
+      <div className="p-4">
+        {editingContent !== null ? (
+          <div className="space-y-2">
+            <textarea
+              value={editingContent}
+              onChange={(e) => setEditingContent(e.target.value)}
+              className="min-h-[120px] w-full resize-none rounded border border-neutral-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <div className="flex gap-2">
+              <button onClick={handleUseEditedDraft} className="flex-1 rounded bg-primary-500 py-1.5 text-xs font-semibold text-white hover:bg-primary-600">
+                Use this version
+              </button>
+              <button onClick={() => setEditingContent(null)} className="rounded border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : aiDraft ? (
+          <AiResponseCard
+            responseContent={aiDraft.content}
+            confidence={aiDraft.confidence}
+            executionCost={aiDraft.cost}
+            onApplyDraft={handleApplyDraft}
+            onEdit={handleEdit}
+            onEscalate={handleEscalate}
+          />
+        ) : (
+          <div className="py-6 text-center text-xs text-neutral-400">
+            <Bot className="mx-auto mb-2 h-8 w-8 animate-bounce text-neutral-300" />
+            <p>No draft suggestion available yet.</p>
+            <Can resource="ai_agent" action="manage">
+              <button
+                onClick={() => generateDraftMutation.mutate(activeConv.id)}
+                disabled={generateDraftMutation.isPending}
+                className="mt-3 rounded border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {generateDraftMutation.isPending ? 'Generating…' : 'Generate Suggestion'}
+              </button>
+            </Can>
+          </div>
+        )}
+      </div>
 
+      {aiDraft && aiDraft.toolCalls.length > 0 && (
+        <div className="space-y-2 p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">LLM Tool Executions</h3>
           <div className="space-y-2">
             {aiDraft.toolCalls.map((tool, idx) => (
-              <div key={idx} className="p-2.5 bg-neutral-50 border border-neutral-200 rounded text-xs">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-bold text-neutral-800">{tool.name}</span>
-                  <span className={`text-[9px] uppercase font-black px-1 py-0.25 rounded ${
-                    tool.status === 'success' ? 'text-success bg-success/15' : tool.status === 'failed' ? 'text-danger bg-danger/15 animate-pulse' : 'text-neutral-500 bg-neutral-100'
-                  }`}>
-                    {tool.status}
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] text-neutral-400 font-bold block">ARGUMENTS:</span>
-                  <pre className="text-[10px] bg-white p-1.5 border border-neutral-100 rounded overflow-x-auto text-neutral-700 max-h-[80px]">
-                    {JSON.stringify(tool.arguments, null, 2)}
-                  </pre>
-                </div>
-              </div>
+              <AiToolCallViewer key={idx} toolCall={toAiToolCall(tool, idx)} />
             ))}
           </div>
         </div>

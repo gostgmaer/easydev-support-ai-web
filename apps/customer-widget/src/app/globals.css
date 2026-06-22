@@ -1,0 +1,18 @@
+@import '@easydev/design-system/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-transparent text-foreground antialiased;
+  font-family: 'Inter', sans-serif;
+}

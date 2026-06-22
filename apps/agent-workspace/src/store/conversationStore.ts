@@ -1,16 +1,15 @@
 import { create } from 'zustand';
-import { Message, AiDraft } from '../types';
+import { Message } from '../types';
 
 interface ConversationState {
   messages: Record<string, Message[]>;
   typingStates: Record<string, Record<string, { name: string; timestamp: number }>>;
+  /** The human agent's own in-progress reply text, keyed by conversation - draft recovery. */
   drafts: Record<string, string>;
-  aiDrafts: Record<string, AiDraft | null>;
   setMessages: (conversationId: string, messages: Message[]) => void;
   addMessage: (conversationId: string, message: Message) => void;
   setTyping: (conversationId: string, userId: string, name: string, isTyping: boolean) => void;
   setDraft: (conversationId: string, content: string) => void;
-  setAiDraft: (conversationId: string, draft: AiDraft | null) => void;
   updateMessageReaction: (
     conversationId: string,
     messageId: string,
@@ -29,7 +28,6 @@ export const useConversationStore = create<ConversationState>((set) => ({
   messages: {},
   typingStates: {},
   drafts: {},
-  aiDrafts: {},
   setMessages: (conversationId, messages) =>
     set((state) => ({
       messages: { ...state.messages, [conversationId]: messages },
@@ -65,10 +63,6 @@ export const useConversationStore = create<ConversationState>((set) => ({
   setDraft: (conversationId, content) =>
     set((state) => ({
       drafts: { ...state.drafts, [conversationId]: content },
-    })),
-  setAiDraft: (conversationId, draft) =>
-    set((state) => ({
-      aiDrafts: { ...state.aiDrafts, [conversationId]: draft },
     })),
   updateMessageReaction: (conversationId, messageId, emoji, userId, action) =>
     set((state) => {

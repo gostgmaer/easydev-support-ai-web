@@ -1,12 +1,15 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Inbox, AlertTriangle, User, Settings, CheckSquare, Sparkles } from 'lucide-react';
+import { Search, Inbox, AlertTriangle, User, Settings, CheckSquare, Sparkles, MessageSquare } from 'lucide-react';
+import { FocusTrap } from '@easydev/ui';
 import { useInboxStore } from '../store/inboxStore';
+import { useCreateTicket, useGlobalInboxSearch } from '../hooks/useQueries';
+import { useUpdateAiStatus } from '../hooks/useAiQueries';
 
 interface CommandItem {
   id: string;
   title: string;
-  category: 'Actions' | 'Navigation' | 'Help';
+  category: 'Actions' | 'Navigation' | 'Help' | 'Conversations';
   icon: React.ComponentType<{ className?: string }>;
   action: () => void;
 }
@@ -14,72 +17,114 @@ interface CommandItem {
 export function CommandPalette({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const router = useRouter();
   const setSelectedView = useInboxStore((state) => state.setSelectedView);
+  const activeConversationId = useInboxStore((state) => state.activeConversationId);
+  const activeConversation = useInboxStore((state) =>
+    state.conversations.find((c) => c.id === state.activeConversationId),
+  );
+  const updateAiStatus = useUpdateAiStatus();
+  const createTicket = useCreateTicket();
+  const setActiveConversationId = useInboxStore((state) => state.setActiveConversationId);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const commands: CommandItem[] = [
-    {
-      id: 'go-my',
-      title: 'Go to My Conversations',
-      category: 'Navigation',
-      icon: User,
-      action: () => {
-        setSelectedView('my');
-        router.push('/inbox');
-      },
-    },
-    {
-      id: 'go-unassigned',
-      title: 'Go to Unassigned Inbox',
-      category: 'Navigation',
-      icon: Inbox,
-      action: () => {
-        setSelectedView('unassigned');
-        router.push('/inbox');
-      },
-    },
-    {
-      id: 'go-escalated',
-      title: 'Go to Escalated Inbox',
-      category: 'Navigation',
-      icon: AlertTriangle,
-      action: () => {
-        setSelectedView('escalated');
-        router.push('/inbox');
-      },
-    },
-    {
-      id: 'go-settings',
-      title: 'Go to Settings',
-      category: 'Navigation',
-      icon: Settings,
-      action: () => router.push('/settings'),
-    },
-    {
-      id: 'cmd-takeover',
-      title: 'Take Over Conversation from AI',
-      category: 'Actions',
-      icon: Sparkles,
-      action: () => {
-        // Optimistic toggle will handle active conversation takeover
-        alert('AI Takeover command executed');
-      },
-    },
-    {
-      id: 'cmd-create-ticket',
-      title: 'Create Ticket from Active Conversation',
-      category: 'Actions',
-      icon: CheckSquare,
-      action: () => {
-        alert('Create ticket request initiated');
-      },
-    },
-  ];
+  const { data: searchResults = [] } = useGlobalInboxSearch(searchQuery);
 
-  const filteredCommands = commands.filter((c) =>
-    c.title.toLowerCase().includes(searchQuery.toLowerCase())
+  const commands: CommandItem[] = useMemo(() => {
+    const items: CommandItem[] = [
+      {
+        id: 'go-my',
+        title: 'Go to My Conversations',
+        category: 'Navigation',
+        icon: User,
+        action: () => {
+          setSelectedView('my');
+          router.push('/inbox/my');
+        },
+      },
+      {
+        id: 'go-unassigned',
+        title: 'Go to Unassigned Inbox',
+        category: 'Navigation',
+        icon: Inbox,
+        action: () => {
+          setSelectedView('unassigned');
+          router.push('/inbox/unassigned');
+        },
+      },
+      {
+        id: 'go-escalated',
+        title: 'Go to Escalated Inbox',
+        category: 'Navigation',
+        icon: AlertTriangle,
+        action: () => {
+          setSelectedView('escalated');
+          router.push('/inbox/escalated');
+        },
+      },
+      {
+        id: 'go-search',
+        title: 'Go to Search',
+        category: 'Navigation',
+        icon: Search,
+        action: () => router.push('/search'),
+      },
+      {
+        id: 'go-settings',
+        title: 'Go to Settings',
+        category: 'Navigation',
+        icon: Settings,
+        action: () => router.push('/settings'),
+      },
+    ];
+
+    if (activeConversationId && activeConversation) {
+      items.push(
+        {
+          id: 'cmd-takeover',
+          title: 'Take Over Conversation from AI',
+          category: 'Actions',
+          icon: Sparkles,
+          action: () => updateAiStatus.mutate({ conversationId: activeConversationId, status: 'takeover' }),
+        },
+        {
+          id: 'cmd-create-ticket',
+          title: 'Create Ticket from Active Conversation',
+          category: 'Actions',
+          icon: CheckSquare,
+          action: () =>
+            createTicket.mutate({
+              conversationId: activeConversationId,
+              subject: activeConversation.subject,
+              priority: activeConversation.priority,
+            }),
+        },
+      );
+    }
+
+    return items;
+  }, [activeConversationId, activeConversation, setSelectedView, router, updateAiStatus, createTicket]);
+
+  const conversationItems: CommandItem[] = useMemo(
+    () =>
+      searchResults.map((conv) => ({
+        id: `conv-${conv.id}`,
+        title: conv.lastMessage ? conv.lastMessage.slice(0, 80) : `Conversation ${conv.id}`,
+        category: 'Conversations',
+        icon: MessageSquare,
+        action: () => {
+          setActiveConversationId(conv.id);
+          router.push('/inbox/my');
+        },
+      })),
+    [searchResults, setActiveConversationId, router],
   );
+
+  const filteredCommands = useMemo(() => {
+    const staticMatches = commands.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    return searchQuery.trim().length > 1 ? [...staticMatches, ...conversationItems] : staticMatches;
+  }, [commands, conversationItems, searchQuery]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -122,6 +167,7 @@ export function CommandPalette({ isOpen, onClose }: { isOpen: boolean; onClose: 
       aria-modal="true"
       aria-labelledby="cmd-search-input"
     >
+      <FocusTrap initialFocusRef={inputRef}>
       <div
         className="w-full max-w-xl bg-white rounded-lg shadow-2xl border border-neutral-200 overflow-hidden flex flex-col focus:outline-none"
         onClick={(e) => e.stopPropagation()}
@@ -131,13 +177,13 @@ export function CommandPalette({ isOpen, onClose }: { isOpen: boolean; onClose: 
         <div className="flex items-center gap-3 px-4 py-3 border-b border-neutral-200 bg-neutral-50">
           <Search className="h-5 w-5 text-neutral-400" />
           <input
+            ref={inputRef}
             id="cmd-search-input"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Type a command or route to navigate..."
             className="flex-1 bg-transparent text-sm text-neutral-900 border-none outline-none focus:ring-0 placeholder:text-neutral-400"
-            autoFocus
             aria-autocomplete="list"
           />
         </div>
@@ -185,6 +231,7 @@ export function CommandPalette({ isOpen, onClose }: { isOpen: boolean; onClose: 
           <span>ESC Close</span>
         </div>
       </div>
+      </FocusTrap>
     </div>
   );
 }

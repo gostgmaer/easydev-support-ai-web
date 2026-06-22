@@ -1,191 +1,93 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Send, Eye, ShieldAlert, Paperclip, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useAuth } from '@easydev/auth';
+import { MessageComposer as MessageComposerPrimitive } from '@easydev/ui';
+import { useConversationStore } from '../store/conversationStore';
 import { useInboxStore } from '../store/inboxStore';
-import { useSendMessage } from '../hooks/useQueries';
+import { useSendMessage, useMessageTemplates } from '../hooks/useQueries';
 import { useRealtime } from '../hooks/useRealtime';
 
+const DRAFT_SAVE_DEBOUNCE_MS = 400;
+
 export function MessageComposer() {
+  const { user } = useAuth();
   const activeConversationId = useInboxStore((state) => state.activeConversationId);
-  const [content, setContent] = useState('');
-  const [isInternalNote, setIsInternalNote] = useState(false);
-  const [attachments, setAttachments] = useState<{ name: string; url: string; size: number; type: string }[]>([]);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const draft = useConversationStore((state) =>
+    activeConversationId ? state.drafts[activeConversationId] ?? '' : '',
+  );
+  const setDraft = useConversationStore((state) => state.setDraft);
+
+  const [value, setValue] = useState(draft);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sendMessageMutation = useSendMessage();
-  const { emitTyping } = useRealtime('agent-101');
+  const { data: templates = [] } = useMessageTemplates();
+  const { emitTyping } = useRealtime(user?.id);
 
+  // Restore the in-progress draft when switching conversations (draft recovery).
   useEffect(() => {
-    // Reset composer state on conversation switch
-    setContent('');
-    setIsInternalNote(false);
-    setAttachments([]);
-  }, [activeConversationId]);
+    setValue(draft);
+  }, [activeConversationId, draft]);
 
   if (!activeConversationId) return null;
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setContent(val);
+  const handleValueChange = (next: string) => {
+    setValue(next);
+    emitTyping(activeConversationId, next.length > 0);
 
-    // Emit typing status to customer/collaborators
-    emitTyping(activeConversationId, true);
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    typingTimeoutRef.current = setTimeout(() => {
-      emitTyping(activeConversationId, false);
-    }, 1500);
+    if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+    draftSaveTimeoutRef.current = setTimeout(() => {
+      setDraft(activeConversationId, next);
+    }, DRAFT_SAVE_DEBOUNCE_MS);
   };
 
-  const handleSend = () => {
-    if (!content.trim() && attachments.length === 0) return;
-
+  const handleSend = (content: string, isInternalNote: boolean) => {
     sendMessageMutation.mutate(
-      {
-        conversationId: activeConversationId,
-        content: content.trim(),
-        isInternalNote,
-      },
+      { conversationId: activeConversationId, content, isInternalNote },
       {
         onSuccess: () => {
-          setContent('');
-          setAttachments([]);
+          setValue('');
+          setDraft(activeConversationId, '');
           emitTyping(activeConversationId, false);
         },
-      }
+      },
     );
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Send message on Enter without Shift key
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const addMockAttachment = () => {
-    setAttachments((prev) => [
-      ...prev,
-      {
-        name: 'invoice-doc.pdf',
-        url: '#',
-        size: 154200,
-        type: 'application/pdf',
-      },
-    ]);
+  const handleInsertTemplate = (content: string) => {
+    handleValueChange(value ? `${value}\n${content}` : content);
+    setTemplatesOpen(false);
   };
 
   return (
-    <div className="p-4 border-t border-neutral-200 bg-white space-y-3">
-      {/* Mode Selectors */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setIsInternalNote(false)}
-          className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition ${
-            !isInternalNote
-              ? 'bg-primary-50 border-primary-200 text-primary-700 font-bold'
-              : 'bg-white border-neutral-200 text-neutral-500 hover:bg-neutral-50'
-          }`}
-          aria-label="Public reply mode"
-        >
-          💬 Public Reply
-        </button>
-        <button
-          onClick={() => setIsInternalNote(true)}
-          className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition ${
-            isInternalNote
-              ? 'bg-amber-50 border-amber-200 text-amber-700 font-bold'
-              : 'bg-white border-neutral-200 text-neutral-500 hover:bg-neutral-50'
-          }`}
-          aria-label="Internal note mode"
-        >
-          🔒 Internal Note
-        </button>
-      </div>
-
-      {/* Editor Main Text Area */}
-      <div
-        className={`rounded-md border p-1 transition-all ${
-          isInternalNote
-            ? 'border-amber-300 focus-within:ring-2 focus-within:ring-amber-500/50 bg-amber-50/10'
-            : 'border-neutral-200 focus-within:ring-2 focus-within:ring-primary-500/50 bg-white'
-        }`}
-      >
-        <textarea
-          value={content}
-          onChange={handleTextChange}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            isInternalNote
-              ? 'Type an internal note visible only to support agents...'
-              : 'Type public reply to customer (Shift+Enter for new line)...'
-          }
-          className="w-full text-sm text-neutral-800 p-2 border-none outline-none resize-none min-h-[90px] bg-transparent placeholder:text-neutral-400"
-          aria-label="Message text composer"
-        />
-
-        {/* Selected Attachments list */}
-        {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 p-2 bg-neutral-50 border-t border-neutral-100 rounded-b">
-            {attachments.map((file, idx) => (
-              <div key={idx} className="flex items-center gap-1.5 text-xs text-neutral-700 bg-white border border-neutral-200 px-2.5 py-1 rounded">
-                <span>📎 {file.name}</span>
-                <button
-                  onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== idx))}
-                  className="text-neutral-400 hover:text-danger ml-1 font-bold text-xs"
-                  aria-label={`Remove attachment ${file.name}`}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Actions and Send Triggers */}
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={addMockAttachment}
-            className="p-2 rounded-md border border-neutral-200 text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800 transition"
-            title="Attach a file"
-            aria-label="Attach a file"
-          >
-            <Paperclip className="h-4 w-4" />
-          </button>
-          
-          <button
-            onClick={() => setContent((prev) => prev + '/macro ')}
-            className="px-2.5 py-1.5 rounded-md border border-neutral-200 text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800 text-xs font-semibold transition"
-            title="Insert a macro shortcut"
-            aria-label="Insert macro shortcut"
-          >
-            ⌨️ Macros (/)
-          </button>
-        </div>
-
-        <button
-          onClick={handleSend}
-          disabled={sendMessageMutation.isPending || (!content.trim() && attachments.length === 0)}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md shadow-xs transition ${
-            isInternalNote
-              ? 'bg-amber-500 text-white hover:bg-amber-600 focus:ring-amber-500'
-              : 'bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500'
-          } disabled:opacity-50 disabled:pointer-events-none`}
-          aria-label="Send message"
-        >
-          {sendMessageMutation.isPending ? (
-            <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+    <div className="relative">
+      {templatesOpen && (
+        <div className="absolute bottom-full left-3 z-10 mb-1 max-h-56 w-72 overflow-y-auto rounded-md border border-neutral-200 bg-white py-1 shadow-lg">
+          {templates.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-neutral-400">No templates available</p>
           ) : (
-            <Send className="h-4 w-4" />
+            templates.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => handleInsertTemplate(template.content)}
+                className="block w-full truncate px-3 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-100"
+              >
+                {template.title}
+              </button>
+            ))
           )}
-          <span>{isInternalNote ? 'Save Note' : 'Send'}</span>
-        </button>
-      </div>
+        </div>
+      )}
+
+      <MessageComposerPrimitive
+        value={value}
+        onValueChange={handleValueChange}
+        onSend={handleSend}
+        onOpenTemplates={() => setTemplatesOpen((prev) => !prev)}
+        isSending={sendMessageMutation.isPending}
+        placeholder="Type a public reply or switch to an internal note…"
+      />
     </div>
   );
 }

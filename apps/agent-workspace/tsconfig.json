@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -11,7 +15,7 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "react-jsx",
+    "jsx": "preserve",
     "incremental": true,
     "plugins": [
       {
@@ -19,14 +23,27 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"],
-      "@easydev/ui/*": ["../../packages/ui/src/*"],
-      "@easydev/hooks/*": ["../../packages/hooks/src/*"],
-      "@easydev/icons/*": ["../../packages/icons/src/*"],
-      "@easydev/forms/*": ["../../packages/forms/src/*"],
-      "@easydev/layouts/*": ["../../packages/layouts/src/*"],
-      "@easydev/charts/*": ["../../packages/charts/src/*"],
-      "@easydev/realtime/*": ["../../packages/realtime/src/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@easydev/ui/*": [
+        "../../packages/ui/src/*"
+      ],
+      "@easydev/hooks/*": [
+        "../../packages/hooks/src/*"
+      ],
+      "@easydev/icons/*": [
+        "../../packages/icons/src/*"
+      ],
+      "@easydev/forms/*": [
+        "../../packages/forms/src/*"
+      ],
+      "@easydev/layouts/*": [
+        "../../packages/layouts/src/*"
+      ],
+      "@easydev/charts/*": [
+        "../../packages/charts/src/*"
+      ]
     }
   },
   "include": [
@@ -35,5 +52,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }
