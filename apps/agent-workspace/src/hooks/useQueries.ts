@@ -138,9 +138,11 @@ export function useConversationMessages(conversationId: string | null) {
     queryKey: ['messages', conversationId],
     queryFn: async () => {
       if (!conversationId) return [];
-      const data = await api.get<Message[]>(`/v1/messages/conversation/${conversationId}`);
-      setMessages(conversationId, data);
-      return data;
+      const result = await api.get<{ data: Message[]; total: number; nextCursor?: string }>(
+        `/v1/messages/conversation/${conversationId}`,
+      );
+      setMessages(conversationId, result.data);
+      return result.data;
     },
     enabled: !!conversationId,
   });

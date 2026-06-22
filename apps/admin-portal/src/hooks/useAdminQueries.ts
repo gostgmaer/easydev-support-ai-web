@@ -375,10 +375,7 @@ export function useKnowledgeCategories() {
   const apiClient = useApiClient();
   return useQuery<KnowledgeCategory[]>({
     queryKey: ['admin', 'knowledge-categories'],
-    queryFn: async () => {
-      const result = await apiClient.get<{ data: KnowledgeCategory[]; total: number }>('/v1/knowledge-categories');
-      return result.data;
-    },
+    queryFn: () => apiClient.get<KnowledgeCategory[]>('/v1/knowledge-categories'),
   });
 }
 
