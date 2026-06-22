@@ -32,6 +32,19 @@ function ObservabilityBridge({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Defers mounting FeatureFlagProvider's fetch until AuthProvider's mount-time resync
+ * (exchanging the refresh cookie for a session) has settled. Firing earlier means
+ * useTenantStore.current is still null even for a genuinely logged-in user, causing a
+ * spurious 401 "Missing Tenant ID" race on every fresh load/reload. */
+function FeatureFlagsBridge({ children }: { children: React.ReactNode }) {
+  const { status } = useAuth();
+  return (
+    <FeatureFlagProvider enabled={status === 'authenticated' || status === 'unauthenticated'}>
+      {children}
+    </FeatureFlagProvider>
+  );
+}
+
 /** Houses everything that needs the real signed-in agent's identity: realtime presence,
  * the command palette, and keyboard shortcuts. Must render inside AuthProvider. */
 function WorkspaceShell({ children }: { children: React.ReactNode }) {
@@ -123,11 +136,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <ObservabilityBridge>
             <TenantBrandingBridge>
               <PermissionProvider>
-                <FeatureFlagProvider>
+                <FeatureFlagsBridge>
                   <ErrorBoundary>
                     <WorkspaceShell>{children}</WorkspaceShell>
                   </ErrorBoundary>
-                </FeatureFlagProvider>
+                </FeatureFlagsBridge>
               </PermissionProvider>
             </TenantBrandingBridge>
           </ObservabilityBridge>

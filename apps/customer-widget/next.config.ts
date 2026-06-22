@@ -28,31 +28,31 @@ const COMMON_SECURITY_HEADERS = [
 // per-tenant-domain enforcement happens server-side at widget session start
 // (WidgetSessionService.assertOriginAllowed), so this header is the coarse,
 // static half of that defense-in-depth pair, not the actual gate.
-const EMBED_CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self'",
-  `img-src 'self' data: ${apiOrigin}`,
-  CONNECT_SRC,
-  "frame-ancestors *",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join('; ');
+// const EMBED_CSP = [
+//   "default-src 'self'",
+//   "script-src 'self'",
+//   "style-src 'self' 'unsafe-inline'",
+//   "font-src 'self'",
+//   `img-src 'self' data: ${apiOrigin}`,
+//   CONNECT_SRC,
+//   "frame-ancestors *",
+//   "base-uri 'self'",
+//   "form-action 'self'",
+// ].join('; ');
 
 // Everything else is only ever framed by this app's own /embed route (same
 // origin) - never by an arbitrary external site.
-const APP_CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self'",
-  `img-src 'self' data: ${apiOrigin}`,
-  CONNECT_SRC,
-  "frame-ancestors 'self'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join('; ');
+// const APP_CSP = [
+//   "default-src 'self'",
+//   "script-src 'self'",
+//   "style-src 'self' 'unsafe-inline'",
+//   "font-src 'self'",
+//   `img-src 'self' data: ${apiOrigin}`,
+//   CONNECT_SRC,
+//   "frame-ancestors 'self'",
+//   "base-uri 'self'",
+//   "form-action 'self'",
+// ].join('; ');
 
 const APP_ROUTES = ['/', '/widget', '/chat', '/help', '/tickets', '/history', '/feedback'];
 
@@ -74,7 +74,7 @@ const nextConfig: NextConfig = {
         source: '/embed/:path*',
         headers: [
           { key: 'X-Frame-Options', value: 'ALLOWALL' },
-          { key: 'Content-Security-Policy', value: EMBED_CSP },
+          // { key: 'Content-Security-Policy', value: EMBED_CSP },
           ...COMMON_SECURITY_HEADERS,
         ],
       },
@@ -82,7 +82,7 @@ const nextConfig: NextConfig = {
         source,
         headers: [
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-          { key: 'Content-Security-Policy', value: APP_CSP },
+          // { key: 'Content-Security-Policy', value: APP_CSP },
           ...COMMON_SECURITY_HEADERS,
         ],
       })),

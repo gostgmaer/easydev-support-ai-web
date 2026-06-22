@@ -19,17 +19,17 @@ const socketWsOrigin = socketOrigin.replace(/^http/, "ws");
 // No eval/inline-script usage exists anywhere in this app (confirmed via audit),
 // so script-src can stay strict. style-src needs 'unsafe-inline' for Next.js/
 // Tailwind's runtime style injection - the one pragmatic exception.
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self'",
-  `img-src 'self' data: ${apiOrigin}`,
-  `connect-src 'self' ${apiOrigin} ${socketOrigin} ${socketWsOrigin}`,
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
+// const CSP = [
+//   "default-src 'self'",
+//   "script-src 'self'",
+//   "style-src 'self' 'unsafe-inline'",
+//   "font-src 'self'",
+//   `img-src 'self' data: ${apiOrigin}`,
+//   `connect-src 'self' ${apiOrigin} ${socketOrigin} ${socketWsOrigin}`,
+//   "frame-ancestors 'none'",
+//   "base-uri 'self'",
+//   "form-action 'self'",
+// ].join("; ");
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -47,7 +47,7 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: [
-          { key: "Content-Security-Policy", value: CSP },
+          // { key: "Content-Security-Policy", value: CSP },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },

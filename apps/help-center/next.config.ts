@@ -23,18 +23,18 @@ const widgetOrigin = originOf(process.env.NEXT_PUBLIC_WIDGET_EMBED_URL, null);
 // so script-src can stay strict aside from the optional widget embed origin.
 // style-src needs 'unsafe-inline' for Next.js/Tailwind's runtime style
 // injection - the one pragmatic exception.
-const CSP = [
-  "default-src 'self'",
-  `script-src 'self'${widgetOrigin ? ` ${widgetOrigin}` : ''}`,
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self'",
-  "img-src 'self' data:",
-  `connect-src 'self' ${apiOrigin}`,
-  `frame-src 'self'${widgetOrigin ? ` ${widgetOrigin}` : ''}`,
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join('; ');
+// const CSP = [
+//   "default-src 'self'",
+//   `script-src 'self'${widgetOrigin ? ` ${widgetOrigin}` : ''}`,
+//   "style-src 'self' 'unsafe-inline'",
+//   "font-src 'self'",
+//   "img-src 'self' data:",
+//   `connect-src 'self' ${apiOrigin}`,
+//   `frame-src 'self'${widgetOrigin ? ` ${widgetOrigin}` : ''}`,
+//   "frame-ancestors 'none'",
+//   "base-uri 'self'",
+//   "form-action 'self'",
+// ].join('; ');
 
 const nextConfig: NextConfig = {
   transpilePackages: [
@@ -55,7 +55,7 @@ const nextConfig: NextConfig = {
       {
         source: '/:path*',
         headers: [
-          { key: 'Content-Security-Policy', value: CSP },
+          // { key: 'Content-Security-Policy', value: CSP },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },

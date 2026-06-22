@@ -17,7 +17,20 @@ interface FeatureFlagContextValue {
 
 const FeatureFlagContext = React.createContext<FeatureFlagContextValue | null>(null);
 
-export function FeatureFlagProvider({ children }: { children: React.ReactNode }) {
+export interface FeatureFlagProviderProps {
+  children: React.ReactNode;
+  /** Gates the initial fetch. Defaults to true (anonymous contexts like the Customer
+   * Widget and Help Center have no AuthProvider/resync to wait on, and their tenant
+   * is already known synchronously from the embed/query-param context). Authenticated
+   * apps should pass `status === 'authenticated' || status === 'unauthenticated'` from
+   * useAuth() so this doesn't fire while AuthProvider's mount-time resync (exchanging
+   * the refresh cookie for a session) is still in flight - firing during that window
+   * means useTenantStore.current is still null, so the request 401s with "Missing
+   * Tenant ID" even though the user is genuinely logged in. */
+  enabled?: boolean;
+}
+
+export function FeatureFlagProvider({ children, enabled = true }: FeatureFlagProviderProps) {
   const api = useApiClient();
   const setFlags = useFeatureFlagStore((state) => state.setFlags);
   const client = React.useMemo(() => new FeatureFlagClient(api), [api]);
@@ -32,6 +45,7 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
     queryFn: () => client.fetchFlags(),
     staleTime: 60_000,
     retry: 1,
+    enabled,
   });
 
   const flags = data ?? DEFAULT_FLAGS;
