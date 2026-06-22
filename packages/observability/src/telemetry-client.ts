@@ -13,6 +13,7 @@ import type {
   TelemetryTenantEvent,
   QueueableTelemetryEvent,
 } from './types';
+import { randomBytes } from 'crypto';
 
 // Regex patterns for PII detection
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -22,12 +23,17 @@ const JWT_REGEX = /eyJhbGciOi[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=
 
 /** Simple trace/span generation */
 function generateId(length = 16): string {
-  const chars = '0123456789abcdef';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
+  const byteLength = Math.ceil(length / 2);
+
+  // Prefer Web Crypto in browser-like runtimes
+  if (typeof globalThis !== 'undefined' && globalThis.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(byteLength);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('').slice(0, length);
   }
-  return result;
+
+  // Fallback for Node.js
+  return randomBytes(byteLength).toString('hex').slice(0, length);
 }
 
 export class TelemetryClient {
