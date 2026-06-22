@@ -57,21 +57,21 @@ const ConversationRow = React.memo(function ConversationRow({
   return (
     <div
       style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${top}px)` }}
-      className="flex items-start gap-1 border-b border-neutral-50"
+      className="flex items-start gap-1 border-b border-neutral-100/60 hover:bg-gradient-to-r hover:from-neutral-50/50 hover:to-transparent transition-colors"
     >
       <div className="flex flex-col items-center gap-1.5 px-2 pt-4" onClick={(e) => e.stopPropagation()}>
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelect}
-          className="h-4 w-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500 cursor-pointer"
+          className="h-4 w-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500 focus:ring-offset-1 cursor-pointer"
           aria-label={`Select conversation with ${conv.customerName}`}
         />
-        <button type="button" onClick={onToggleBookmark} aria-label={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}>
-          <Bookmark className={`h-3.5 w-3.5 ${isBookmarked ? 'fill-warning text-warning' : 'text-neutral-300'}`} />
+        <button type="button" onClick={onToggleBookmark} aria-label={isBookmarked ? 'Remove bookmark' : 'Add bookmark'} className="hover:scale-110 transition-transform">
+          <Bookmark className={`h-3.5 w-3.5 ${isBookmarked ? 'fill-warning text-warning' : 'text-neutral-300 hover:text-warning'}`} />
         </button>
-        <button type="button" onClick={onToggleSnooze} aria-label={isSnoozed ? 'Unsnooze conversation' : 'Snooze conversation'}>
-          <AlarmClock className={`h-3.5 w-3.5 ${isSnoozed ? 'fill-primary-100 text-primary-500' : 'text-neutral-300'}`} />
+        <button type="button" onClick={onToggleSnooze} aria-label={isSnoozed ? 'Unsnooze conversation' : 'Snooze conversation'} className="hover:scale-110 transition-transform">
+          <AlarmClock className={`h-3.5 w-3.5 ${isSnoozed ? 'fill-primary-100 text-primary-500' : 'text-neutral-300 hover:text-primary-500'}`} />
         </button>
       </div>
 
@@ -82,19 +82,19 @@ const ConversationRow = React.memo(function ConversationRow({
         {(conv.aiStatus !== 'active' || sla) && (
           <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 -mt-1">
             {conv.aiStatus === 'takeover' && (
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-primary-600 bg-primary-50 border border-primary-100 px-1.5 py-0.5 rounded">
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-primary-600 bg-gradient-to-r from-primary-50 to-primary-100/50 border border-primary-200 px-1.5 py-0.5 rounded-lg shadow-sm">
                 <Sparkles className="h-3 w-3" />
                 <span>Human Direct</span>
               </span>
             )}
             {conv.aiStatus === 'paused' && (
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-warning bg-warning/10 border border-warning/20 px-1.5 py-0.5 rounded">
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-warning bg-gradient-to-r from-warning/10 to-warning/5 border border-warning/20 px-1.5 py-0.5 rounded-lg shadow-sm">
                 <Bot className="h-3 w-3" />
                 <span>AI Paused</span>
               </span>
             )}
             {sla && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-neutral-500 bg-neutral-100/80 border border-neutral-200/60 px-1.5 py-0.5 rounded-lg">
                 <Clock className="h-3 w-3" />
                 <span className={sla.style}>{sla.text}</span>
               </span>
@@ -177,9 +177,9 @@ export function InboxList({ isLoading, hasMore, isFetchingMore, onLoadMore }: In
   };
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-gradient-to-b from-white to-neutral-50/30">
       {/* Header & Bulk Actions Toolbar */}
-      <div className="px-4 py-3 border-b border-neutral-200 flex flex-col gap-2 bg-neutral-50">
+      <div className="px-4 py-3 border-b border-neutral-200/60 flex flex-col gap-2 bg-gradient-to-r from-neutral-50/50 to-transparent">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-500">
             {selectedView} Inbox ({conversations.length})
@@ -188,7 +188,7 @@ export function InboxList({ isLoading, hasMore, isFetchingMore, onLoadMore }: In
             type="checkbox"
             checked={isAllSelected}
             onChange={toggleSelectAll}
-            className="h-4 w-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500 cursor-pointer"
+            className="h-4 w-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500 focus:ring-offset-1 cursor-pointer"
             aria-label="Select all conversations"
           />
         </div>

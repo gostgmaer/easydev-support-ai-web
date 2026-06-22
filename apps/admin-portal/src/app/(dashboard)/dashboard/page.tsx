@@ -32,14 +32,14 @@ export default function AdminDashboardPage() {
   const getMetricCard = (title: string, value: string | number, desc: string, icon: React.ComponentType<{ className?: string }>, color: string) => {
     const Icon = icon;
     return (
-      <div className="bg-white border border-neutral-200 rounded-lg p-5 shadow-xs flex items-center justify-between">
-        <div className="space-y-1">
+      <div className="bg-white border border-neutral-200/60 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow duration-200 flex items-center justify-between group">
+        <div className="space-y-1.5">
           <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider block">{title}</span>
-          <span className="text-xl font-extrabold text-neutral-900 block">{value}</span>
+          <span className="text-2xl font-extrabold text-neutral-900 block tracking-tight">{value}</span>
           <span className="text-[10px] text-neutral-500 block leading-none">{desc}</span>
         </div>
-        <div className={`h-11 w-11 rounded-lg flex items-center justify-center ${color}`}>
-          <Icon className="h-5.5 w-5.5" />
+        <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${color} shadow-sm group-hover:scale-105 transition-transform duration-200`}>
+          <Icon className="h-6 w-6" />
         </div>
       </div>
     );
@@ -48,12 +48,12 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6" role="region" aria-label="Admin Dashboard Metrics">
       {/* Page Header */}
-      <div className="flex justify-between items-center bg-white border border-neutral-200 rounded-lg p-6 shadow-xs">
+      <div className="flex justify-between items-center bg-gradient-to-r from-white to-neutral-50/50 border border-neutral-200/60 rounded-xl p-6 shadow-sm">
         <div>
-          <h1 className="text-base font-bold text-neutral-900">Governance Console</h1>
-          <p className="text-xs text-neutral-500">Real-time platform metrics, connector logs, SLAs, and AI copilot deflection controls.</p>
+          <h1 className="text-lg font-bold text-neutral-900 tracking-tight">Governance Console</h1>
+          <p className="text-xs text-neutral-500 mt-1">Real-time platform metrics, connector logs, SLAs, and AI copilot deflection controls.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-success/10 border border-success/20 rounded-full">
           <div className="h-2.5 w-2.5 bg-success rounded-full animate-pulse" />
           <span className="text-xs font-bold text-success">System Online</span>
         </div>
@@ -100,7 +100,7 @@ export default function AdminDashboardPage() {
       {/* Grid: Incidents & Health Status */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Incidents Alert Box */}
-        <div className="lg:col-span-2 bg-white border border-neutral-200 rounded-lg p-6 shadow-xs space-y-4">
+        <div className="lg:col-span-2 bg-white border border-neutral-200/60 rounded-xl p-6 shadow-sm space-y-4">
           <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5 border-b border-neutral-100 pb-3">
             <AlertTriangle className="h-4.5 w-4.5" />
             <span>Active Incident Alarms</span>
@@ -113,13 +113,13 @@ export default function AdminDashboardPage() {
           ) : incidents.length > 0 ? (
             <div className="divide-y divide-neutral-100">
               {incidents.map((incident) => (
-                <div key={incident.id} className="flex justify-between items-center py-3">
+                <div key={incident.id} className="flex justify-between items-center py-3 hover:bg-neutral-50/50 transition-colors rounded-lg px-2 -mx-2">
                   <div className="space-y-1">
                     <span className="text-xs font-bold text-neutral-900 block">{incident.title}</span>
                     <span className="text-[10px] text-neutral-400 block">Reported: {new Date(incident.createdAt).toLocaleTimeString()}</span>
                   </div>
-                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                    incident.severity === 'CRITICAL' || incident.severity === 'HIGH' ? 'bg-danger/10 border border-danger/25 text-danger' : 'bg-warning/10 border border-warning/25 text-warning'
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg ${
+                    incident.severity === 'CRITICAL' || incident.severity === 'HIGH' ? 'bg-danger/10 border border-danger/25 text-danger shadow-sm' : 'bg-warning/10 border border-warning/25 text-warning shadow-sm'
                   }`}>
                     {incident.severity}
                   </span>
@@ -132,7 +132,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Worker health card */}
-        <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs space-y-4">
+        <div className="bg-white border border-neutral-200/60 rounded-xl p-6 shadow-sm space-y-4">
           <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5 border-b border-neutral-100 pb-3">
             <Server className="h-4.5 w-4.5" />
             <span>Operational Worker Nodes</span>
@@ -146,19 +146,21 @@ export default function AdminDashboardPage() {
                 {(() => {
                   const totalBacklogged = queues.reduce((sum, q) => sum + q.waiting + q.failed, 0);
                   return (
-                    <div className="flex justify-between items-center py-1.5 border-b border-neutral-100">
-                      <span>BullMQ Queue Status</span>
-                      <span className={totalBacklogged === 0 ? 'text-success font-semibold' : 'text-warning font-semibold'}>
+                    <div className="flex justify-between items-center py-2 border-b border-neutral-100">
+                      <span className="font-medium">BullMQ Queue Status</span>
+                      <span className={`px-2 py-0.5 rounded-lg font-semibold ${
+                        totalBacklogged === 0 ? 'bg-success/10 text-success border border-success/20' : 'bg-warning/10 text-warning border border-warning/20'
+                      }`}>
                         {totalBacklogged === 0 ? 'Healthy' : `${totalBacklogged} backlogged`}
                       </span>
                     </div>
                   );
                 })()}
                 {healthChecks.map((check) => (
-                  <div key={check.id} className="flex justify-between items-center py-1.5 border-b border-neutral-100">
-                    <span className="capitalize">{check.serviceName.replace(/-/g, ' ')}</span>
-                    <span className={`font-semibold ${
-                      check.status === 'HEALTHY' ? 'text-success' : check.status === 'DEGRADED' ? 'text-warning' : 'text-danger'
+                  <div key={check.id} className="flex justify-between items-center py-2 border-b border-neutral-100 last:border-0">
+                    <span className="capitalize font-medium">{check.serviceName.replace(/-/g, ' ')}</span>
+                    <span className={`px-2 py-0.5 rounded-lg font-semibold ${
+                      check.status === 'HEALTHY' ? 'bg-success/10 text-success border border-success/20' : check.status === 'DEGRADED' ? 'bg-warning/10 text-warning border border-warning/20' : 'bg-danger/10 text-danger border border-danger/20'
                     }`}>
                       {check.status} • {check.latencyMs}ms
                     </span>

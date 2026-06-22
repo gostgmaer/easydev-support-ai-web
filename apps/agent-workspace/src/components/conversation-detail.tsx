@@ -129,7 +129,7 @@ export function ConversationDetail({ showOpenLink = false }: ConversationDetailP
   }
 
   return (
-    <div className="flex h-full min-w-0 flex-col">
+    <div className="flex h-full min-w-0 flex-col bg-gradient-to-b from-white to-neutral-50/30">
       <ConversationHeader
         conversation={toConversationSummary(activeConversation)}
         actions={
@@ -139,7 +139,7 @@ export function ConversationDetail({ showOpenLink = false }: ConversationDetailP
             {showOpenLink && (
               <Link
                 href={`/conversations/${activeConversationId}`}
-                className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline"
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline hover:text-primary-700 transition-colors"
               >
                 Open <ExternalLink className="h-3 w-3" />
               </Link>
@@ -154,7 +154,7 @@ export function ConversationDetail({ showOpenLink = false }: ConversationDetailP
           <MessageComposer />
         </div>
 
-        <div className="w-80 shrink-0 border-l border-neutral-200 overflow-y-auto">
+        <div className="w-80 shrink-0 border-l border-neutral-200/60 bg-gradient-to-b from-white to-neutral-50/20 overflow-y-auto">
           <Tabs defaultValue="customer">
             <TabsList className="m-2">
               <TabsTrigger value="customer">Customer</TabsTrigger>
