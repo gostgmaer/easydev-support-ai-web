@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { FileText, Search, Trash2, Folder, Plus, Globe } from 'lucide-react';
+import { toAppError } from '@easydev/utils';
 import {
   useKnowledgeDocuments,
   useDeleteKnowledgeDocument,
@@ -73,7 +74,7 @@ function AddSourceForm({ onCreated }: { onCreated: () => void }) {
     <form onSubmit={handleSubmit} className="space-y-3 text-xs max-w-2xl">
       {createMutation.isError && (
         <p className="text-danger-600 bg-danger/10 border border-danger/20 rounded p-2">
-          Failed to create knowledge source.
+          {toAppError(createMutation.error).message}
         </p>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -197,7 +198,7 @@ function AddDocumentForm({
     <form onSubmit={handleSubmit} className="space-y-3 text-xs max-w-2xl border border-neutral-200 rounded-lg p-4 bg-neutral-50/50">
       {createMutation.isError && (
         <p className="text-danger-600 bg-danger/10 border border-danger/20 rounded p-2">
-          Failed to create document. Check the slug isn&apos;t already in use.
+          {toAppError(createMutation.error).message}
         </p>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

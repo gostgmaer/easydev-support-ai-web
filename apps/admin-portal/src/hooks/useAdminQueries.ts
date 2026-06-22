@@ -10,6 +10,7 @@ import {
   IncidentAlert,
   Team,
   ApiKey,
+  Webhook,
   CommunicationChannel,
 } from '../store/adminStore';
 import { useAuth } from '@easydev/auth';
@@ -460,9 +461,9 @@ export function useIncidentsAlerts() {
   return useQuery<IncidentAlert[]>({
     queryKey: ['admin', 'incidents'],
     queryFn: async () => {
-      const data = await apiClient.get<IncidentAlert[]>('/admin/incidents');
-      setIncidents(data);
-      return data;
+      const result = await apiClient.get<{ data: IncidentAlert[]; total: number }>('/v1/admin/incidents');
+      setIncidents(result.data);
+      return result.data;
     },
   });
 }
@@ -474,7 +475,7 @@ export function useResolveIncident() {
 
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
-      return apiClient.post<IncidentAlert>(`/admin/incidents/${id}/resolve`);
+      return apiClient.post<IncidentAlert>(`/v1/admin/incidents/${id}/resolve`);
     },
     onMutate: async ({ id }) => {
       resolve(id);
@@ -538,14 +539,24 @@ export interface AgentProfile {
   id: string;
   displayName: string;
   status: string;
+  employeeCode?: string;
+  timezone: string;
+  skillScore: number;
+  capacity: {
+    capacity: number;
+    maxConcurrentConversations: number;
+    maxOpenTickets: number;
+  };
 }
 
-export function useAgentProfiles() {
+export function useAgentProfiles(search?: string) {
   const apiClient = useApiClient();
   return useQuery<AgentProfile[]>({
-    queryKey: ['admin', 'agent-profiles'],
+    queryKey: ['admin', 'agent-profiles', search],
     queryFn: async () => {
-      const result = await apiClient.get<{ data: AgentProfile[]; total: number }>('/v1/agents');
+      const result = await apiClient.get<{ data: AgentProfile[]; total: number }>('/v1/agents', {
+        query: { limit: 100, ...(search ? { search } : {}) },
+      });
       return result.data;
     },
   });
@@ -647,6 +658,24 @@ export function useRevokeApiKey() {
   });
 }
 
+// The new raw key is only ever returned once, at rotation time - same
+// one-time-reveal pattern as useCreateApiKey. The rotated key keeps its
+// existing id, so the list refetch on settle is what syncs the store
+// (no optimistic local edit needed).
+export function useRotateApiKey() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      return apiClient.post<ApiKey & { rawKey: string }>(`/v1/admin/api-keys/${id}/rotate`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'api-keys'] });
+    },
+  });
+}
+
 // 8. ANALYTICS
 export interface DashboardMetrics {
   conversationsCount: number;
@@ -739,6 +768,58 @@ export function useTriggerAnalyticsExport() {
         recipients: user?.email ? [user.email] : [],
       });
     },
+  });
+}
+
+export interface AnalyticsReport {
+  id: string;
+  name: string;
+  description?: string;
+  reportType: string;
+  timeRange: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function useAnalyticsReports() {
+  const apiClient = useApiClient();
+  return useQuery<AnalyticsReport[]>({
+    queryKey: ['admin', 'analytics', 'reports'],
+    queryFn: () => apiClient.get<AnalyticsReport[]>('/v1/analytics/reports'),
+  });
+}
+
+export function useCreateAnalyticsReport() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: { name: string; reportType: string; timeRange: string }) =>
+      apiClient.post<AnalyticsReport>('/v1/analytics/reports', variables),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'analytics', 'reports'] }),
+  });
+}
+
+export function useDeleteAnalyticsReport() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => apiClient.delete<void>(`/v1/analytics/reports/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'analytics', 'reports'] }),
+  });
+}
+
+// Same "no synchronous download" constraint as useTriggerAnalyticsExport -
+// queues an async email delivery of an already-generated report.
+export function useExportAnalyticsReport() {
+  const apiClient = useApiClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: ({ reportId, format }: { reportId: string; format: 'CSV' | 'PDF' }) =>
+      apiClient.post<{ success: boolean; message: string }>('/v1/analytics/exports/manual', {
+        reportId,
+        format,
+        recipients: user?.email ? [user.email] : [],
+      }),
   });
 }
 
@@ -892,6 +973,93 @@ export function useProvisionTenant() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'api-keys'] });
+    },
+  });
+}
+
+// 11. WEBHOOKS
+export function useWebhooks() {
+  const apiClient = useApiClient();
+  const setWebhooks = useAdminStore((state) => state.setWebhooks);
+  return useQuery<Webhook[]>({
+    queryKey: ['admin', 'webhooks'],
+    queryFn: async () => {
+      const result = await apiClient.get<{ data: Webhook[]; total: number }>('/v1/admin/webhooks');
+      setWebhooks(result.data);
+      return result.data;
+    },
+  });
+}
+
+// The signing secret is only ever returned once, at registration time - same
+// one-time-reveal pattern as useCreateApiKey.
+export function useRegisterWebhook() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  const addWebhook = useAdminStore((state) => state.addWebhook);
+
+  return useMutation({
+    mutationFn: async (variables: { name: string; url: string; events: string[] }) => {
+      return apiClient.post<Webhook & { secret: string }>('/v1/admin/webhooks', variables);
+    },
+    onSuccess: (data) => {
+      const { secret, ...webhook } = data;
+      addWebhook(webhook);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'webhooks'] });
+    },
+  });
+}
+
+export function useSetWebhookEnabled() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  const updateWebhook = useAdminStore((state) => state.updateWebhook);
+
+  return useMutation({
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      return apiClient.post<Webhook>(`/v1/admin/webhooks/${id}/${enabled ? 'enable' : 'disable'}`);
+    },
+    onSuccess: (data) => updateWebhook(data),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'webhooks'] });
+    },
+  });
+}
+
+// There's no "send a test ping" endpoint - the real backend action is
+// re-delivering the most recent payload to validate the endpoint is reachable.
+export function useRetryWebhookDelivery() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  const updateWebhook = useAdminStore((state) => state.updateWebhook);
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      return apiClient.post<Webhook>(`/v1/admin/webhooks/${id}/retry`);
+    },
+    onSuccess: (data) => updateWebhook(data),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'webhooks'] });
+    },
+  });
+}
+
+export function useDeleteWebhook() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  const removeWebhook = useAdminStore((state) => state.removeWebhook);
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      return apiClient.delete<void>(`/v1/admin/webhooks/${id}`);
+    },
+    onMutate: async ({ id }) => {
+      removeWebhook(id);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'webhooks'] });
     },
   });
 }

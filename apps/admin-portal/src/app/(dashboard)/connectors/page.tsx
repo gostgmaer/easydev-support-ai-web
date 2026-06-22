@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Database, Search, Settings, Plus, RefreshCw } from 'lucide-react';
+import { toAppError } from '@easydev/utils';
 import {
   useConnectorsList,
   useSetConnectorStatus,
@@ -92,7 +93,7 @@ function InstallConnectorForm({ onInstalled }: { onInstalled: () => void }) {
     <form onSubmit={handleSubmit} className="space-y-3 text-xs max-w-2xl">
       {installMutation.isError && (
         <p className="text-danger-600 bg-danger/10 border border-danger/20 rounded p-2">
-          Failed to install connector. Check the slug isn&apos;t already in use.
+          {toAppError(installMutation.error).message}
         </p>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -392,7 +393,7 @@ function ExecutionHistory({ connectorId }: { connectorId: string }) {
       )}
       {retryMutation.isError && (
         <p className="text-danger-600 bg-danger/10 border border-danger/20 rounded p-2">
-          Retry failed. The execution may not be eligible for retry anymore.
+          {toAppError(retryMutation.error).message}
         </p>
       )}
     </div>

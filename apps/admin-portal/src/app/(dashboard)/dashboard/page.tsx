@@ -119,7 +119,7 @@ export default function AdminDashboardPage() {
                     <span className="text-[10px] text-neutral-400 block">Reported: {new Date(incident.createdAt).toLocaleTimeString()}</span>
                   </div>
                   <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                    incident.severity === 'critical' ? 'bg-danger/10 border border-danger/25 text-danger' : 'bg-warning/10 border border-warning/25 text-warning'
+                    incident.severity === 'CRITICAL' || incident.severity === 'HIGH' ? 'bg-danger/10 border border-danger/25 text-danger' : 'bg-warning/10 border border-warning/25 text-warning'
                   }`}>
                     {incident.severity}
                   </span>

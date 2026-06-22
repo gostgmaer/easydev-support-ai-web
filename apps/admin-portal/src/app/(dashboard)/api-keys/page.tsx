@@ -1,13 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { Key, Plus, Trash2, Copy, AlertTriangle } from 'lucide-react';
-import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '../../../hooks/useAdminQueries';
+import { Key, Plus, Trash2, Copy, AlertTriangle, RefreshCw } from 'lucide-react';
+import { useApiKeys, useCreateApiKey, useRevokeApiKey, useRotateApiKey } from '../../../hooks/useAdminQueries';
 
 export default function ApiKeysPage() {
   const { data: keys, isLoading, isError } = useApiKeys();
   const createKeyMutation = useCreateApiKey();
   const revokeKeyMutation = useRevokeApiKey();
+  const rotateKeyMutation = useRotateApiKey();
 
   const [showCreateForm, setShowCreateForm] = React.useState(false);
   const [name, setName] = React.useState('');
@@ -35,6 +36,12 @@ export default function ApiKeysPage() {
   const handleRevokeKey = (id: string, keyName: string) => {
     if (confirm(`Are you sure you want to revoke API Key: ${keyName}?`)) {
       revokeKeyMutation.mutate({ id });
+    }
+  };
+
+  const handleRotateKey = (id: string, keyName: string) => {
+    if (confirm(`Rotate API Key "${keyName}"? The current key will stop working immediately.`)) {
+      rotateKeyMutation.mutate({ id }, { onSuccess: (data) => setRevealedKey(data.rawKey) });
     }
   };
 
@@ -170,13 +177,23 @@ export default function ApiKeysPage() {
                       <td className="p-3">{new Date(k.createdAt).toLocaleDateString()}</td>
                       <td className="p-3 text-right">
                         {k.status === 'ACTIVE' && (
-                          <button
-                            onClick={() => handleRevokeKey(k.id, k.name)}
-                            className="text-neutral-400 hover:text-danger p-1"
-                            aria-label={`Revoke API Key ${k.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleRotateKey(k.id, k.name)}
+                              disabled={rotateKeyMutation.isPending}
+                              className="text-neutral-400 hover:text-primary-600 p-1"
+                              aria-label={`Rotate API Key ${k.name}`}
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleRevokeKey(k.id, k.name)}
+                              className="text-neutral-400 hover:text-danger p-1"
+                              aria-label={`Revoke API Key ${k.name}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

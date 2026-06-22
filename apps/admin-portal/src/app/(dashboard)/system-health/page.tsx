@@ -162,11 +162,11 @@ export default function SystemHealthPage() {
 
                     <div className="flex items-center gap-3">
                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
-                        incident.severity === 'critical' ? 'text-danger bg-danger/15' : 'text-warning bg-warning/15'
+                        incident.severity === 'CRITICAL' || incident.severity === 'HIGH' ? 'text-danger bg-danger/15' : 'text-warning bg-warning/15'
                       }`}>
                         {incident.severity}
                       </span>
-                      {incident.status !== 'resolved' && (
+                      {incident.status !== 'RESOLVED' && (
                         <button
                           onClick={() => resolveMutation.mutate({ id: incident.id })}
                           className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-900 text-white font-bold text-[10px] rounded transition"

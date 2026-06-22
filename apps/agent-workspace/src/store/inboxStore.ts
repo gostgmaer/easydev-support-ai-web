@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { safeLocalStorage } from '@easydev/utils';
 import { Conversation, ConversationStatus, ConversationPriority } from '../types';
 
 export interface InboxFilters {
@@ -16,17 +15,6 @@ export interface SavedInboxView {
 }
 
 export type InboxView = 'my' | 'team' | 'unassigned' | 'escalated' | 'bookmarks' | 'snoozed';
-
-const BOOKMARKS_STORAGE_KEY = 'easydev.agent-workspace.bookmarks';
-
-/**
- * Bookmarks are a personal, per-agent preference with no backend counterpart
- * (the conversation domain has no bookmark concept) - kept client-only in
- * localStorage rather than faking a sync call to a non-existent endpoint.
- */
-function loadBookmarkedIds(): Set<string> {
-  return new Set(safeLocalStorage.getJSON<string[]>(BOOKMARKS_STORAGE_KEY) ?? []);
-}
 
 interface InboxState {
   selectedView: InboxView;
@@ -53,7 +41,7 @@ interface InboxState {
   updateConversation: (id: string, updates: Partial<Conversation>) => void;
   addSavedView: (name: string, filters: InboxFilters) => void;
   removeSavedView: (id: string) => void;
-  toggleBookmark: (id: string) => void;
+  setBookmarkedIds: (ids: Set<string>) => void;
 }
 
 export const useInboxStore = create<InboxState>((set) => ({
@@ -66,7 +54,7 @@ export const useInboxStore = create<InboxState>((set) => ({
   hasMore: false,
   isLoadingMore: false,
   savedViews: [],
-  bookmarkedIds: loadBookmarkedIds(),
+  bookmarkedIds: new Set(),
   setSelectedView: (view) => set({ selectedView: view, selectedConversationIds: [] }),
   setFilters: (filters) => set({ filters }),
   updateFilters: (updates) => set((state) => ({ filters: { ...state.filters, ...updates } })),
@@ -101,12 +89,5 @@ export const useInboxStore = create<InboxState>((set) => ({
     })),
   removeSavedView: (id) =>
     set((state) => ({ savedViews: state.savedViews.filter((v) => v.id !== id) })),
-  toggleBookmark: (id) =>
-    set((state) => {
-      const next = new Set(state.bookmarkedIds);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      safeLocalStorage.setJSON(BOOKMARKS_STORAGE_KEY, Array.from(next));
-      return { bookmarkedIds: next };
-    }),
+  setBookmarkedIds: (bookmarkedIds) => set({ bookmarkedIds }),
 }));

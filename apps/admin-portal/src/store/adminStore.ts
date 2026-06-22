@@ -63,8 +63,8 @@ export interface WorkflowRule {
 export interface IncidentAlert {
   id: string;
   title: string;
-  severity: 'critical' | 'warning' | 'info';
-  status: 'open' | 'investigating' | 'resolved';
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  status: 'OPEN' | 'INVESTIGATING' | 'MONITORING' | 'RESOLVED';
   createdAt: string;
 }
 
@@ -92,6 +92,18 @@ export interface ApiKey {
   createdAt: string;
 }
 
+export interface Webhook {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  status: 'ACTIVE' | 'DISABLED' | 'FAILING';
+  lastDeliveryAt?: string;
+  lastDeliveryStatus?: string;
+  consecutiveFailures: number;
+  createdAt: string;
+}
+
 // 2. Combined Store State
 interface AdminState {
   metrics: SystemMetric;
@@ -102,6 +114,7 @@ interface AdminState {
   incidents: IncidentAlert[];
   teams: Team[];
   apiKeys: ApiKey[];
+  webhooks: Webhook[];
   isGlobalSearchOpen: boolean;
   activeNotificationsCount: number;
 
@@ -124,6 +137,10 @@ interface AdminState {
   setApiKeys: (keys: ApiKey[]) => void;
   addApiKey: (key: ApiKey) => void;
   removeApiKey: (id: string) => void;
+  setWebhooks: (webhooks: Webhook[]) => void;
+  addWebhook: (webhook: Webhook) => void;
+  updateWebhook: (webhook: Webhook) => void;
+  removeWebhook: (id: string) => void;
   setGlobalSearchOpen: (open: boolean) => void;
   clearNotifications: () => void;
 }
@@ -144,6 +161,7 @@ export const useAdminStore = create<AdminState>((set) => ({
   incidents: [],
   teams: [],
   apiKeys: [],
+  webhooks: [],
   isGlobalSearchOpen: false,
   activeNotificationsCount: 3,
 
@@ -168,7 +186,7 @@ export const useAdminStore = create<AdminState>((set) => ({
   setIncidents: (incidents) => set({ incidents }),
   resolveIncident: (id) =>
     set((state) => ({
-      incidents: state.incidents.map((i) => (i.id === id ? { ...i, status: 'resolved' } : i)),
+      incidents: state.incidents.map((i) => (i.id === id ? { ...i, status: 'RESOLVED' } : i)),
     })),
   setTeams: (teams) => set({ teams }),
   addTeam: (team) => set((state) => ({ teams: [team, ...state.teams] })),
@@ -180,6 +198,14 @@ export const useAdminStore = create<AdminState>((set) => ({
   addApiKey: (key) => set((state) => ({ apiKeys: [key, ...state.apiKeys] })),
   removeApiKey: (id) =>
     set((state) => ({ apiKeys: state.apiKeys.filter((k) => k.id !== id) })),
+  setWebhooks: (webhooks) => set({ webhooks }),
+  addWebhook: (webhook) => set((state) => ({ webhooks: [webhook, ...state.webhooks] })),
+  updateWebhook: (webhook) =>
+    set((state) => ({
+      webhooks: state.webhooks.map((w) => (w.id === webhook.id ? webhook : w)),
+    })),
+  removeWebhook: (id) =>
+    set((state) => ({ webhooks: state.webhooks.filter((w) => w.id !== id) })),
   setGlobalSearchOpen: (isGlobalSearchOpen) => set({ isGlobalSearchOpen }),
   clearNotifications: () => set({ activeNotificationsCount: 0 }),
 }));

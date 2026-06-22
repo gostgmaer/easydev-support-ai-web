@@ -1,18 +1,24 @@
 import React, { useEffect, useRef } from 'react';
 import { Bot } from 'lucide-react';
+import { useAuth } from '@easydev/auth';
 import { MessageBubble, TypingIndicator, ConversationLoading } from '@easydev/ui';
 import { useConversationStore } from '../store/conversationStore';
 import { useInboxStore } from '../store/inboxStore';
-import { useConversationMessages } from '../hooks/useQueries';
+import { useConversationMessages, useMarkConversationRead } from '../hooks/useQueries';
+import { useRealtime } from '../hooks/useRealtime';
 import { toMessageItem } from '../lib/ui-adapters';
 
 export function ConversationTimeline() {
+  const { user } = useAuth();
   const activeConversationId = useInboxStore((state) => state.activeConversationId);
   const { data: messages = [], isLoading } = useConversationMessages(activeConversationId);
   const typingUsers = useConversationStore((state) => {
     if (!activeConversationId) return {};
     return state.typingStates[activeConversationId] || {};
   });
+
+  const { emitRead } = useRealtime(user?.id);
+  const markReadMutation = useMarkConversationRead();
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -21,6 +27,15 @@ export function ConversationTimeline() {
       scrollRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, typingUsers]);
+
+  // Opening a conversation marks it read for this agent (durable) and
+  // broadcasts a live read-receipt to other connected agents.
+  useEffect(() => {
+    if (!activeConversationId) return;
+    markReadMutation.mutate(activeConversationId);
+    emitRead(activeConversationId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId]);
 
   if (!activeConversationId) {
     return (

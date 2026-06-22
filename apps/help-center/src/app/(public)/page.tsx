@@ -3,7 +3,8 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCategories, useRecentArticles } from '@/hooks/useHelpQueries';
+import { useCategories, useRecentArticles, useAskHelpAI, useSubmitAiDeflectionFeedback } from '@/hooks/useHelpQueries';
+import { useAIHelpStore } from '@/store/aiHelpStore';
 import {
   Search,
   BookOpen,
@@ -12,15 +13,47 @@ import {
   ChevronRight,
   HelpCircle,
   Bot,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 import { Input, Button, Badge, Spinner } from '@easydev/ui';
 
 export default function PublicHomePage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [aiQuery, setAiQuery] = React.useState('');
+  const [feedbackGiven, setFeedbackGiven] = React.useState(false);
 
   const { data: categories = [], isLoading: loadingCategories } = useCategories();
   const { data: recentArticles = [], isLoading: loadingArticles } = useRecentArticles(3);
+
+  const chatHistory = useAIHelpStore((state) => state.chatHistory);
+  const isAskingAI = useAIHelpStore((state) => state.isAskingAI);
+  const suggestedQuestions = useAIHelpStore((state) => state.suggestedQuestions);
+  const escalationTriggered = useAIHelpStore((state) => state.escalationTriggered);
+  const askAIMutation = useAskHelpAI();
+  const deflectionFeedbackMutation = useSubmitAiDeflectionFeedback();
+
+  const lastAnswer = chatHistory.filter((m) => m.sender === 'assistant').slice(-1)[0];
+  const lastResult = askAIMutation.data;
+
+  const handleAskAI = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiQuery.trim() || isAskingAI) return;
+    setFeedbackGiven(false);
+    askAIMutation.mutate(
+      { query: aiQuery.trim(), sessionId: lastResult?.sessionId },
+      { onSuccess: () => setAiQuery('') },
+    );
+  };
+
+  const handleDeflectionFeedback = (resolved: boolean) => {
+    if (!lastResult) return;
+    deflectionFeedbackMutation.mutate(
+      { sessionId: lastResult.sessionId, resolved, documentId: lastResult.sources[0]?.id },
+      { onSuccess: () => setFeedbackGiven(true) },
+    );
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,21 +206,107 @@ export default function PublicHomePage() {
         </section>
       </div>
 
-      {/* 4. Ask AI - not yet available (no conversational AI endpoint exists
-          for anonymous Help Center visitors; only Search hits real data) */}
-      <section className="border border-neutral-200 bg-white rounded-2xl p-6 shadow-xs flex items-center gap-4">
-        <div className="h-10 w-10 bg-neutral-100 text-neutral-400 rounded-lg flex items-center justify-center shrink-0">
-          <Bot className="h-5.5 w-5.5" />
+      {/* 4. Ask AI Copilot */}
+      <section className="border border-neutral-200 bg-white rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 bg-neutral-900 text-white rounded-lg flex items-center justify-center shrink-0">
+            <Bot className="h-5.5 w-5.5" />
+          </div>
+          <div>
+            <h3 className="font-extrabold text-neutral-900 text-xs">Ask AI Copilot</h3>
+            <p className="text-[10px] text-neutral-400 mt-0.5">
+              Get an instant AI-generated answer drawn from our knowledge base.
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 className="font-extrabold text-neutral-700 text-xs flex items-center gap-1.5">
-            <span>Ask AI Copilot</span>
-            <Badge tone="neutral" className="text-[9px] uppercase tracking-wider font-bold">Coming Soon</Badge>
-          </h3>
-          <p className="text-[10px] text-neutral-400 mt-0.5">
-            Conversational AI assistance isn&apos;t available yet - try Search above in the meantime.
-          </p>
-        </div>
+
+        <form onSubmit={handleAskAI} className="flex gap-2">
+          <Input
+            value={aiQuery}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAiQuery(e.target.value)}
+            placeholder="Ask a question..."
+            className="flex-1 text-xs"
+            disabled={isAskingAI}
+          />
+          <Button type="submit" disabled={isAskingAI || !aiQuery.trim()} className="text-xs font-bold px-4">
+            {isAskingAI ? <Spinner className="h-3.5 w-3.5" /> : 'Ask'}
+          </Button>
+        </form>
+
+        {suggestedQuestions.length > 0 && chatHistory.length === 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {suggestedQuestions.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => setAiQuery(q)}
+                className="text-[10px] font-semibold text-neutral-600 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-full px-2.5 py-1"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {lastAnswer && (
+          <div className="border-t border-neutral-100 pt-4 space-y-3">
+            <p className="text-xs text-neutral-700 leading-relaxed whitespace-pre-wrap">{lastAnswer.content}</p>
+
+            {lastResult && lastResult.sources.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {lastResult.sources.map((src) => (
+                  <Link
+                    key={src.id}
+                    href={`/articles/${src.slug}`}
+                    className="text-[10px] font-bold text-primary-600 hover:text-primary-700 bg-primary-50 border border-primary-100 rounded px-2 py-0.5"
+                  >
+                    {src.title}
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {escalationTriggered && !feedbackGiven && (
+              <div className="flex items-center justify-between gap-3 bg-neutral-50 border border-neutral-100 rounded-lg p-3">
+                <p className="text-[10px] text-neutral-500">Did this resolve your question?</p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDeflectionFeedback(true)}
+                    className="text-[10px] font-bold flex items-center gap-1"
+                  >
+                    <ThumbsUp className="h-3 w-3" /> Yes
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDeflectionFeedback(false)}
+                    className="text-[10px] font-bold flex items-center gap-1"
+                  >
+                    <ThumbsDown className="h-3 w-3" /> No
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {feedbackGiven && deflectionFeedbackMutation.data && (
+              <p className="text-[10px] font-semibold text-success">{deflectionFeedbackMutation.data.message}</p>
+            )}
+
+            {escalationTriggered && (
+              <Link
+                href="/contact-support"
+                className="text-[10px] font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1"
+              >
+                <span>Still need help? Contact support</span>
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            )}
+          </div>
+        )}
       </section>
     </div>
   );

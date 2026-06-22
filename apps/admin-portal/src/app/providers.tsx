@@ -2,14 +2,14 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@easydev/auth';
+import { ApiClientError } from '@easydev/api-client';
 import { PermissionProvider } from '@easydev/permissions';
 import { FeatureFlagProvider } from '@easydev/feature-flags';
 import { AnalyticsProvider } from '@easydev/analytics';
 import { ThemeProvider, TenantBrandingProvider } from '@easydev/design-system';
 import { ObservabilityProvider, useTelemetry, ErrorBoundary } from '@easydev/observability';
-import { ApiProvider } from '@easydev/api-client';
-import { useAuthStore, useTenantStore } from '@easydev/stores';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333';
 
@@ -32,37 +32,65 @@ function ObservabilityBridge({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** ApiClientConfig has no onForbidden hook (only onUnauthorized) - this watches the
+ * shared QueryClient's caches directly for FORBIDDEN responses and redirects to the
+ * existing /forbidden page, the same way onUnauthorized already redirects to /login. */
+function ForbiddenRedirectBridge({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  React.useEffect(() => {
+    const isForbidden = (error: unknown) => error instanceof ApiClientError && error.code === 'FORBIDDEN';
+
+    const unsubscribeQueries = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === 'updated' && event.action.type === 'error' && isForbidden(event.action.error)) {
+        router.replace('/forbidden');
+      }
+    });
+    const unsubscribeMutations = queryClient.getMutationCache().subscribe((event) => {
+      if (event.type === 'updated' && event.action.type === 'error' && isForbidden(event.action.error)) {
+        router.replace('/forbidden');
+      }
+    });
+
+    return () => {
+      unsubscribeQueries();
+      unsubscribeMutations();
+    };
+  }, [queryClient, router]);
+
+  return <>{children}</>;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const apiConfig = React.useMemo(
-    () => ({
-      baseUrl: API_BASE_URL,
-      getAccessToken: () => useAuthStore.getState().tokens?.accessToken ?? null,
-      getTenantId: () => useTenantStore.getState().current?.id ?? null,
-    }),
-    [],
-  );
 
+  // AuthProvider already builds and wraps its own ApiProvider internally
+  // (@easydev/auth's createAuthClients - getAccessToken, getTenantId,
+  // refreshTokens, AND onUnauthorized all wired to the real auth store/IAM
+  // client). Admin-portal is an authenticated-only app, so there's no need
+  // to re-resolve the tenant from elsewhere - nesting a second, separately
+  // configured ApiProvider here would just shadow that correct one with an
+  // incomplete duplicate (no refresh, no 401 handling) for every page in
+  // the app, which is exactly what was happening before this was removed.
   return (
     <ThemeProvider>
       <AuthProvider baseUrl={API_BASE_URL} onUnauthenticated={() => router.replace('/login')}>
-        <ApiProvider config={apiConfig}>
-          <ObservabilityProvider appName="admin-portal">
-            <ObservabilityBridge>
-              <TenantBrandingBridge>
-                <PermissionProvider>
-                  <FeatureFlagProvider>
-                    <AnalyticsProvider app="admin-portal">
-                      <ErrorBoundary>
-                        {children}
-                      </ErrorBoundary>
-                    </AnalyticsProvider>
-                  </FeatureFlagProvider>
-                </PermissionProvider>
-              </TenantBrandingBridge>
-            </ObservabilityBridge>
-          </ObservabilityProvider>
-        </ApiProvider>
+        <ObservabilityProvider appName="admin-portal">
+          <ObservabilityBridge>
+            <TenantBrandingBridge>
+              <PermissionProvider>
+                <FeatureFlagProvider>
+                  <AnalyticsProvider app="admin-portal">
+                    <ErrorBoundary>
+                      {children}
+                    </ErrorBoundary>
+                  </AnalyticsProvider>
+                </FeatureFlagProvider>
+              </PermissionProvider>
+            </TenantBrandingBridge>
+          </ObservabilityBridge>
+        </ObservabilityProvider>
       </AuthProvider>
     </ThemeProvider>
   );

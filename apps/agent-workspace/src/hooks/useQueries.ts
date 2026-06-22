@@ -57,13 +57,11 @@ export function useConversations(view: InboxView, filters: InboxFilters, teamId?
           baseQuery.priority = 'URGENT';
           break;
         case 'snoozed':
-          // No "snoozed" status exists - WAITING_AGENT (parked for agent follow-up) is the
-          // closest real backend status.
-          baseQuery.status = 'WAITING_AGENT';
+          baseQuery.status = 'SNOOZED';
           break;
         case 'bookmarks':
-          // Bookmarks are a client-only preference (see inboxStore) - fetch the general
-          // listing and filter to bookmarked ids client-side below.
+          // No bulk "fetch conversations by id list" endpoint exists - fetch the general
+          // listing and filter to the real, server-sourced bookmarked ids client-side below.
           break;
       }
 
@@ -128,6 +126,20 @@ export function useConversationMessages(conversationId: string | null) {
       return data;
     },
     enabled: !!conversationId,
+  });
+}
+
+export function useMarkConversationRead() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (conversationId: string) => {
+      return api.post<{ read: boolean }>(`/v1/inbox/${conversationId}/read`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['inbox'] });
+    },
   });
 }
 
@@ -380,6 +392,66 @@ export function useCloseConversation() {
     },
     onMutate: async ({ conversationId }) => {
       updateConversation(conversationId, { status: 'resolved' });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['inbox'] });
+    },
+  });
+}
+
+// Bookmarks are a real, per-agent backend concept (POST/DELETE /v1/inbox/:id/bookmark,
+// GET /v1/inbox/bookmarks) - not a client-only preference.
+export function useBookmarkedConversationIds() {
+  const api = useApiClient();
+  const setBookmarkedIds = useInboxStore((state) => state.setBookmarkedIds);
+
+  return useQuery<Set<string>>({
+    queryKey: ['inbox-bookmarks'],
+    queryFn: async () => {
+      const bookmarks = await api.get<{ conversationId: string }[]>('/v1/inbox/bookmarks');
+      const ids = new Set(bookmarks.map((b) => b.conversationId));
+      setBookmarkedIds(ids);
+      return ids;
+    },
+  });
+}
+
+export function useToggleBookmark() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ conversationId, bookmarked }: { conversationId: string; bookmarked: boolean }) => {
+      if (bookmarked) {
+        return api.delete<{ bookmarked: boolean }>(`/v1/inbox/${conversationId}/bookmark`);
+      }
+      return api.post<{ bookmarked: boolean }>(`/v1/inbox/${conversationId}/bookmark`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['inbox-bookmarks'] });
+    },
+  });
+}
+
+// No duration picker exists yet (would need new UI beyond integration wiring) - snoozing
+// always parks the conversation for a fixed window, same single-click pattern as bookmarks.
+const DEFAULT_SNOOZE_HOURS = 4;
+
+export function useToggleSnooze() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const updateConversation = useInboxStore((state) => state.updateConversation);
+
+  return useMutation({
+    mutationFn: async ({ conversationId, snoozed }: { conversationId: string; snoozed: boolean }) => {
+      if (snoozed) {
+        return api.delete<{ unsnoozed: boolean }>(`/v1/inbox/${conversationId}/snooze`);
+      }
+      const snoozedUntil = new Date(Date.now() + DEFAULT_SNOOZE_HOURS * 60 * 60 * 1000).toISOString();
+      return api.post<{ id: string }>(`/v1/inbox/${conversationId}/snooze`, { snoozedUntil });
+    },
+    onMutate: async ({ conversationId, snoozed }) => {
+      updateConversation(conversationId, { status: snoozed ? 'open' : 'snoozed' });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['inbox'] });

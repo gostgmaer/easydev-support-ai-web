@@ -1,11 +1,11 @@
 import React, { useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Bookmark, Bot, Clock, Sparkles } from 'lucide-react';
+import { AlarmClock, Bookmark, Bot, Clock, Sparkles } from 'lucide-react';
 import { useAuth } from '@easydev/auth';
 import { useHasPermission } from '@easydev/permissions';
 import { ConversationCard, BulkActions, NoConversationsEmptyState, InboxLoading, type BulkAction } from '@easydev/ui';
 import { useInboxStore } from '../store/inboxStore';
-import { useAssignConversation } from '../hooks/useQueries';
+import { useAssignConversation, useBookmarkedConversationIds, useToggleBookmark, useToggleSnooze } from '../hooks/useQueries';
 import { toConversationSummary } from '../lib/ui-adapters';
 import { Conversation } from '../types';
 
@@ -36,6 +36,7 @@ interface ConversationRowProps {
   top: number;
   onToggleSelect: () => void;
   onToggleBookmark: () => void;
+  onToggleSnooze: () => void;
   onOpen: () => void;
 }
 
@@ -47,9 +48,11 @@ const ConversationRow = React.memo(function ConversationRow({
   top,
   onToggleSelect,
   onToggleBookmark,
+  onToggleSnooze,
   onOpen,
 }: ConversationRowProps) {
   const sla = formatSla(conv.slaDueDate);
+  const isSnoozed = conv.status === 'snoozed';
 
   return (
     <div
@@ -66,6 +69,9 @@ const ConversationRow = React.memo(function ConversationRow({
         />
         <button type="button" onClick={onToggleBookmark} aria-label={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}>
           <Bookmark className={`h-3.5 w-3.5 ${isBookmarked ? 'fill-warning text-warning' : 'text-neutral-300'}`} />
+        </button>
+        <button type="button" onClick={onToggleSnooze} aria-label={isSnoozed ? 'Unsnooze conversation' : 'Snooze conversation'}>
+          <AlarmClock className={`h-3.5 w-3.5 ${isSnoozed ? 'fill-primary-100 text-primary-500' : 'text-neutral-300'}`} />
         </button>
       </div>
 
@@ -111,7 +117,10 @@ export function InboxList({ isLoading, hasMore, isFetchingMore, onLoadMore }: In
   const setSelectedConversationIds = useInboxStore((state) => state.setSelectedConversationIds);
   const clearSelection = useInboxStore((state) => state.clearSelection);
   const setActiveConversationId = useInboxStore((state) => state.setActiveConversationId);
-  const toggleBookmark = useInboxStore((state) => state.toggleBookmark);
+
+  useBookmarkedConversationIds();
+  const toggleBookmarkMutation = useToggleBookmark();
+  const toggleSnoozeMutation = useToggleSnooze();
 
   const assignMutation = useAssignConversation();
   const canAssign = useHasPermission('conversation', 'assign');
@@ -151,7 +160,9 @@ export function InboxList({ isLoading, hasMore, isFetchingMore, onLoadMore }: In
       label: 'Bookmark selected',
       icon: <Bookmark className="h-3.5 w-3.5" />,
       onAction: (selected) => {
-        selected.forEach((c) => toggleBookmark(c.id));
+        selected.forEach((c) =>
+          toggleBookmarkMutation.mutate({ conversationId: c.id, bookmarked: bookmarkedIds.has(c.id) }),
+        );
         clearSelection();
       },
     },
@@ -209,7 +220,12 @@ export function InboxList({ isLoading, hasMore, isFetchingMore, onLoadMore }: In
                   isBookmarked={bookmarkedIds.has(conv.id)}
                   top={virtualRow.start}
                   onToggleSelect={() => toggleSelectConversation(conv.id)}
-                  onToggleBookmark={() => toggleBookmark(conv.id)}
+                  onToggleBookmark={() =>
+                    toggleBookmarkMutation.mutate({ conversationId: conv.id, bookmarked: bookmarkedIds.has(conv.id) })
+                  }
+                  onToggleSnooze={() =>
+                    toggleSnoozeMutation.mutate({ conversationId: conv.id, snoozed: conv.status === 'snoozed' })
+                  }
                   onOpen={() => setActiveConversationId(conv.id)}
                 />
               );

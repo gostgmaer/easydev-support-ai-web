@@ -54,7 +54,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const tenantIdRef = React.useRef<string | null>(null);
   const [, setTenantId] = React.useState<string | null>(null);
   const apiConfig = React.useMemo(
-    () => ({ baseUrl: `${API_BASE_URL}/api`, getTenantId: () => tenantIdRef.current }),
+    () => ({ baseUrl: API_BASE_URL, getTenantId: () => tenantIdRef.current }),
     []
   );
 

@@ -31,17 +31,18 @@ export function priorityToBackend(priority: ConversationPriority): string {
   return PRIORITY_TO_BACKEND[priority];
 }
 
-// Backend ConversationStatusEnum: OPEN/PENDING/ASSIGNED/WAITING_CUSTOMER/WAITING_AGENT/RESOLVED/CLOSED/ARCHIVED.
-// Local ConversationStatus only distinguishes open/snoozed/resolved - WAITING_AGENT is the
-// closest real status to "snoozed" (an agent parked it for later); the rest collapse sensibly.
+// Backend InboxStatusEnum (the inbox-view projection's own status, not the
+// conversation's): OPEN/PENDING/WAITING_CUSTOMER/WAITING_AGENT/SNOOZED/RESOLVED/ARCHIVED.
+// Local ConversationStatus only distinguishes open/snoozed/resolved - SNOOZED is the
+// real "explicitly snoozed by an agent" status; WAITING_AGENT (parked, but not via
+// the snooze action) collapses into the same local bucket for display purposes.
 const CONVERSATION_STATUS_FROM_BACKEND: Record<string, ConversationStatus> = {
   OPEN: 'open',
   PENDING: 'open',
-  ASSIGNED: 'open',
   WAITING_CUSTOMER: 'open',
   WAITING_AGENT: 'snoozed',
+  SNOOZED: 'snoozed',
   RESOLVED: 'resolved',
-  CLOSED: 'resolved',
   ARCHIVED: 'resolved',
 };
 

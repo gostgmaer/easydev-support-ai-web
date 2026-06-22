@@ -1,9 +1,11 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useApiClient } from '@easydev/api-client';
+import { useAnalytics } from '@easydev/analytics';
 import { useSearchStore, HelpArticleSummary } from '../store/searchStore';
 import { useKnowledgeStore, HelpCategory } from '../store/knowledgeStore';
 import { useArticleStore, DetailedArticle } from '../store/articleStore';
 import { useTicketStore, HelpTicketSummary } from '../store/ticketStore';
+import { useAIHelpStore } from '../store/aiHelpStore';
 
 // Raw shapes returned by the backend's public knowledge/ticket endpoints
 // (src/modules/public-help on the backend) - these mirror the real
@@ -193,6 +195,7 @@ export function useRelatedArticles(slug: string, categoryId?: string) {
 // 3. GLOBAL KNOWLEDGE SEARCH
 export function useArticleSearch(query: string, categoryId?: string) {
   const apiClient = useApiClient();
+  const analytics = useAnalytics();
   const setSearchResults = useSearchStore((state) => state.setSearchResults);
   const setSearching = useSearchStore((state) => state.setSearching);
   const categories = useKnowledgeStore((state) => state.categories);
@@ -209,6 +212,7 @@ export function useArticleSearch(query: string, categoryId?: string) {
         });
         const results = raw.map((r) => toSummary(r.document, categories));
         setSearchResults(results);
+        analytics.trackEvent('help_search', { query, categoryId, resultsCount: results.length });
         return results;
       } finally {
         setSearching(false);
@@ -258,6 +262,7 @@ const TICKET_CATEGORY_LABELS: Record<string, string> = {
 
 export function useSubmitHelpTicket() {
   const apiClient = useApiClient();
+  const analytics = useAnalytics();
   const addTicketToHistory = useTicketStore((state) => state.addTicketToHistory);
 
   return useMutation({
@@ -278,7 +283,7 @@ export function useSubmitHelpTicket() {
         priority: TICKET_PRIORITY_MAP[variables.priority] ?? 'MEDIUM',
       });
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       addTicketToHistory({
         id: data.id,
         ticketNumber: data.ticketNumber,
@@ -287,6 +292,70 @@ export function useSubmitHelpTicket() {
         status: data.status,
         createdAt: data.createdAt,
       });
+      analytics.trackEvent('help_ticket_submitted', { category: variables.category, priority: data.priority });
     },
+  });
+}
+
+// 5. AI ASSISTANCE (FLOW 5)
+export interface AiAssistSource {
+  id: string;
+  title: string;
+  slug: string;
+  score: number;
+}
+
+export interface AiAssistResult {
+  sessionId: string;
+  answer: string | null;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  sources: AiAssistSource[];
+  suggestEscalation: boolean;
+  escalationPrompt: string | null;
+}
+
+export function useAskHelpAI() {
+  const apiClient = useApiClient();
+  const analytics = useAnalytics();
+  const addAIMessage = useAIHelpStore((state) => state.addAIMessage);
+  const setAskingAI = useAIHelpStore((state) => state.setAskingAI);
+  const setEscalationTriggered = useAIHelpStore((state) => state.setEscalationTriggered);
+
+  return useMutation({
+    mutationFn: async (variables: { query: string; sessionId?: string; categoryId?: string }) => {
+      return apiClient.post<AiAssistResult>('/v1/public/ai-assist/query', variables);
+    },
+    onMutate: (variables) => {
+      setAskingAI(true);
+      addAIMessage({
+        id: `user-${Date.now()}`,
+        sender: 'user',
+        content: variables.query,
+        createdAt: new Date().toISOString(),
+      });
+    },
+    onSuccess: (data) => {
+      addAIMessage({
+        id: `${data.sessionId}-${Date.now()}`,
+        sender: 'assistant',
+        content: data.answer || data.escalationPrompt || "I couldn't find an answer to that.",
+        confidenceScore: data.confidence === 'HIGH' ? 1 : data.confidence === 'MEDIUM' ? 0.6 : 0.3,
+        createdAt: new Date().toISOString(),
+      });
+      if (data.suggestEscalation) setEscalationTriggered(true);
+      analytics.trackFeatureUsage('help-ai-assist', { confidence: data.confidence, suggestEscalation: data.suggestEscalation });
+    },
+    onSettled: () => setAskingAI(false),
+  });
+}
+
+export function useSubmitAiDeflectionFeedback() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: (variables: { sessionId: string; resolved: boolean; documentId?: string; email?: string }) =>
+      apiClient.post<{ deflected: boolean; ticketId?: string; message: string }>(
+        '/v1/public/ai-assist/deflection-feedback',
+        variables,
+      ),
   });
 }
