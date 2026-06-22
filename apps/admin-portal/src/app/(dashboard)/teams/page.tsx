@@ -1,8 +1,145 @@
 'use client';
 
 import * as React from 'react';
-import { Users, UserPlus, Archive } from 'lucide-react';
-import { useTeams, useCreateTeam, useArchiveTeam } from '../../../hooks/useAdminQueries';
+import { Users, UserPlus, Archive, Settings, UserMinus, Plus } from 'lucide-react';
+import {
+  useTeams,
+  useCreateTeam,
+  useArchiveTeam,
+  useAgentProfiles,
+  useAddTeamAgent,
+  useUpdateTeamAgentRole,
+  useRemoveTeamAgent,
+} from '../../../hooks/useAdminQueries';
+import type { Team } from '../../../store/adminStore';
+
+const MEMBER_ROLES = ['MEMBER', 'LEADER'] as const;
+
+function TeamMembersPanel({ team }: { team: Team }) {
+  const { data: agentProfiles = [], isLoading: isAgentsLoading } = useAgentProfiles();
+  const addAgentMutation = useAddTeamAgent();
+  const updateRoleMutation = useUpdateTeamAgentRole();
+  const removeAgentMutation = useRemoveTeamAgent();
+
+  const [selectedAgentId, setSelectedAgentId] = React.useState('');
+  const [selectedRole, setSelectedRole] = React.useState<typeof MEMBER_ROLES[number]>('MEMBER');
+
+  const agentsById = React.useMemo(
+    () => new Map(agentProfiles.map((a) => [a.id, a])),
+    [agentProfiles],
+  );
+
+  const availableAgents = agentProfiles.filter(
+    (a) => !team.members.some((m) => m.agentProfileId === a.id),
+  );
+
+  React.useEffect(() => {
+    if (!selectedAgentId && availableAgents.length > 0) {
+      setSelectedAgentId(availableAgents[0].id);
+    }
+  }, [availableAgents, selectedAgentId]);
+
+  const handleAddMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAgentId) return;
+    addAgentMutation.mutate(
+      { teamId: team.id, agentProfileId: selectedAgentId, role: selectedRole },
+      { onSuccess: () => setSelectedAgentId('') },
+    );
+  };
+
+  return (
+    <div className="border-t border-neutral-100 pt-3 mt-3 space-y-3 text-xs">
+      <h3 className="font-bold text-neutral-600">Team Members</h3>
+
+      {team.members.length === 0 ? (
+        <p className="text-neutral-400 italic">No members assigned yet.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {team.members.map((member) => (
+            <li
+              key={member.agentProfileId}
+              className="flex items-center justify-between gap-2 p-2 border border-neutral-200 rounded bg-neutral-50/50"
+            >
+              <span className="font-semibold text-neutral-800 truncate">
+                {agentsById.get(member.agentProfileId)?.displayName || member.agentProfileId}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <select
+                  value={member.role}
+                  onChange={(e) =>
+                    updateRoleMutation.mutate({
+                      teamId: team.id,
+                      agentProfileId: member.agentProfileId,
+                      role: e.target.value,
+                    })
+                  }
+                  disabled={updateRoleMutation.isPending}
+                  className="border border-neutral-200 rounded px-2 py-1 bg-white text-[11px] font-semibold"
+                  aria-label={`Role for ${agentsById.get(member.agentProfileId)?.displayName || member.agentProfileId}`}
+                >
+                  {MEMBER_ROLES.map((role) => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => removeAgentMutation.mutate({ teamId: team.id, agentProfileId: member.agentProfileId })}
+                  disabled={removeAgentMutation.isPending}
+                  className="text-neutral-400 hover:text-danger p-1"
+                  aria-label={`Remove ${agentsById.get(member.agentProfileId)?.displayName || member.agentProfileId}`}
+                >
+                  <UserMinus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {isAgentsLoading ? (
+        <p className="text-neutral-400">Loading agents...</p>
+      ) : availableAgents.length === 0 ? (
+        <p className="text-neutral-400 italic">All agent profiles are already on this team.</p>
+      ) : (
+        <form onSubmit={handleAddMember} className="flex items-end gap-2 pt-2 border-t border-neutral-100">
+          <div className="flex flex-col gap-1 flex-1">
+            <label htmlFor={`add-agent-${team.id}`} className="font-semibold text-neutral-600">Agent</label>
+            <select
+              id={`add-agent-${team.id}`}
+              value={selectedAgentId}
+              onChange={(e) => setSelectedAgentId(e.target.value)}
+              className="border border-neutral-200 rounded p-2 bg-white"
+            >
+              {availableAgents.map((agent) => (
+                <option key={agent.id} value={agent.id}>{agent.displayName}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor={`add-role-${team.id}`} className="font-semibold text-neutral-600">Role</label>
+            <select
+              id={`add-role-${team.id}`}
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value as typeof MEMBER_ROLES[number])}
+              className="border border-neutral-200 rounded p-2 bg-white"
+            >
+              {MEMBER_ROLES.map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            disabled={addAgentMutation.isPending}
+            className="flex items-center gap-1 bg-neutral-800 hover:bg-neutral-900 text-white font-bold py-2 px-3 rounded transition disabled:opacity-50 h-[34px]"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
 
 export default function TeamsPage() {
   const { data: teams, isLoading, isError } = useTeams();
@@ -13,6 +150,7 @@ export default function TeamsPage() {
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
   const [department, setDepartment] = React.useState('');
+  const [expandedTeamId, setExpandedTeamId] = React.useState<string | null>(null);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,6 +283,14 @@ export default function TeamsPage() {
                 {team.isActive && (
                   <div className="flex items-center gap-2 border-t border-neutral-100 pt-3 text-xs">
                     <button
+                      onClick={() => setExpandedTeamId((cur) => (cur === team.id ? null : team.id))}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 border rounded font-semibold transition border-neutral-200 text-neutral-600 hover:bg-neutral-50"
+                      aria-expanded={expandedTeamId === team.id}
+                    >
+                      <Settings className="h-3.5 w-3.5" />
+                      <span>Members</span>
+                    </button>
+                    <button
                       onClick={() => handleArchive(team.id, team.name)}
                       disabled={archiveTeamMutation.isPending}
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 border rounded font-semibold transition border-danger/30 bg-danger/10 text-danger hover:bg-danger/20 disabled:opacity-50"
@@ -154,6 +300,8 @@ export default function TeamsPage() {
                     </button>
                   </div>
                 )}
+
+                {expandedTeamId === team.id && <TeamMembersPanel team={team} />}
               </div>
             ))
           )}

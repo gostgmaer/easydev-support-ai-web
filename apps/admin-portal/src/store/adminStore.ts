@@ -75,7 +75,7 @@ export interface Team {
   department?: string;
   priority: number;
   isActive: boolean;
-  members: { agentProfileId: string }[];
+  members: { agentProfileId: string; role: string }[];
   rules: { ruleType: string }[];
   createdAt: string;
 }

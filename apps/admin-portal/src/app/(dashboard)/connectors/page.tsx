@@ -2,15 +2,26 @@
 
 import * as React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Database, Search, Settings, Plus } from 'lucide-react';
+import { Database, Search, Settings, Plus, RefreshCw } from 'lucide-react';
 import {
   useConnectorsList,
   useSetConnectorStatus,
   useInstallConnector,
   useConfigureConnectorApiKey,
   useConfigureConnectorOAuth,
+  useConnectorExecutions,
+  useRetryConnectorExecution,
 } from '@/hooks/useAdminQueries';
 import type { Connector } from '@/store/adminStore';
+
+const EXECUTION_STATUS_TONE: Record<string, string> = {
+  SUCCESS: 'text-success bg-success/15',
+  FAILED: 'text-danger bg-danger/15',
+  CIRCUIT_OPEN: 'text-danger bg-danger/15',
+  RETRYING: 'text-warning bg-warning/15',
+  RUNNING: 'text-primary-600 bg-primary-50',
+  PENDING: 'text-neutral-500 bg-neutral-100',
+};
 
 const STATUS_TONE: Record<Connector['status'], string> = {
   ACTIVE: 'text-success bg-success/15',
@@ -333,6 +344,61 @@ function ConfigureConnectorForm({ connector }: { connector: Connector }) {
   );
 }
 
+function ExecutionHistory({ connectorId }: { connectorId: string }) {
+  const { data: executions = [], isLoading } = useConnectorExecutions(connectorId);
+  const retryMutation = useRetryConnectorExecution();
+
+  return (
+    <div className="mt-3 border-t border-neutral-200 pt-3 text-xs space-y-2">
+      <h3 className="font-bold text-neutral-600">Recent Executions</h3>
+      {isLoading ? (
+        <p className="text-neutral-400">Loading executions...</p>
+      ) : executions.length === 0 ? (
+        <p className="text-neutral-400">No executions recorded yet for this connector.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {executions.map((exec) => {
+            const canRetry = exec.status === 'FAILED' || exec.status === 'CIRCUIT_OPEN';
+            const isRetryingThis =
+              retryMutation.isPending && retryMutation.variables?.executionId === exec.id;
+            return (
+              <li
+                key={exec.id}
+                className="flex items-center justify-between gap-3 p-2 border border-neutral-200 rounded bg-white"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded shrink-0 ${EXECUTION_STATUS_TONE[exec.status] ?? 'text-neutral-500 bg-neutral-100'}`}>
+                    {exec.status}
+                  </span>
+                  <span className="text-neutral-700 font-semibold truncate">{exec.capabilityType}</span>
+                  <span className="text-neutral-400 shrink-0">
+                    attempt {exec.attempt} • {new Date(exec.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                {canRetry && (
+                  <button
+                    onClick={() => retryMutation.mutate({ connectorId, executionId: exec.id })}
+                    disabled={isRetryingThis}
+                    className="flex items-center gap-1 text-primary-600 hover:text-primary-700 font-semibold shrink-0 disabled:opacity-60"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${isRetryingThis ? 'animate-spin' : ''}`} />
+                    {isRetryingThis ? 'Retrying...' : 'Retry'}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {retryMutation.isError && (
+        <p className="text-danger-600 bg-danger/10 border border-danger/20 rounded p-2">
+          Retry failed. The execution may not be eligible for retry anymore.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function ConnectorsPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -472,7 +538,12 @@ export default function ConnectorsPage() {
                       </div>
                     </div>
 
-                    {expandedConnectorId === item.id && <ConfigureConnectorForm connector={item} />}
+                    {expandedConnectorId === item.id && (
+                      <>
+                        <ConfigureConnectorForm connector={item} />
+                        <ExecutionHistory connectorId={item.id} />
+                      </>
+                    )}
                   </div>
                 ))}
               </div>

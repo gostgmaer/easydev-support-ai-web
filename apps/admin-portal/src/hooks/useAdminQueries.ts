@@ -186,6 +186,52 @@ export function useConfigureConnectorOAuth() {
   });
 }
 
+export interface ConnectorExecution {
+  id: string;
+  connectorId: string;
+  capabilityType: string;
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'RETRYING' | 'CIRCUIT_OPEN';
+  statusCode?: number;
+  error?: string;
+  attempt: number;
+  latencyMs: number;
+  startedAt?: string;
+  completedAt?: string;
+  createdAt: string;
+}
+
+export function useConnectorExecutions(connectorId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<ConnectorExecution[]>({
+    queryKey: ['admin', 'connectors', connectorId, 'executions'],
+    queryFn: async () => {
+      const result = await apiClient.get<{ data: ConnectorExecution[]; total: number }>(
+        `/v1/connectors/${connectorId}/executions`,
+      );
+      return result.data;
+    },
+    enabled: !!connectorId,
+  });
+}
+
+export function useRetryConnectorExecution() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ connectorId, executionId }: { connectorId: string; executionId: string }) => {
+      return apiClient.post<{ success: boolean; result: unknown }>(
+        `/v1/connectors/executions/${executionId}/retry`,
+      );
+    },
+    onSettled: (_data, _error, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['admin', 'connectors', variables.connectorId, 'executions'],
+      });
+    },
+  });
+}
+
 // 3. WORKFLOWS
 // "Workflows" in the admin UI maps to the real WorkflowTemplate aggregate
 // (v1/workflows/templates) - there's no separate "workflows" list endpoint;
@@ -488,6 +534,65 @@ export function useArchiveTeam() {
   });
 }
 
+export interface AgentProfile {
+  id: string;
+  displayName: string;
+  status: string;
+}
+
+export function useAgentProfiles() {
+  const apiClient = useApiClient();
+  return useQuery<AgentProfile[]>({
+    queryKey: ['admin', 'agent-profiles'],
+    queryFn: async () => {
+      const result = await apiClient.get<{ data: AgentProfile[]; total: number }>('/v1/agents');
+      return result.data;
+    },
+  });
+}
+
+export function useAddTeamAgent() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ teamId, agentProfileId, role }: { teamId: string; agentProfileId: string; role: string }) => {
+      return apiClient.post<{ success: boolean }>(`/v1/teams/${teamId}/agents`, { agentProfileId, role });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'teams'] });
+    },
+  });
+}
+
+export function useUpdateTeamAgentRole() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ teamId, agentProfileId, role }: { teamId: string; agentProfileId: string; role: string }) => {
+      return apiClient.put<{ success: boolean }>(`/v1/teams/${teamId}/agents/${agentProfileId}/role`, { role });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'teams'] });
+    },
+  });
+}
+
+export function useRemoveTeamAgent() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ teamId, agentProfileId }: { teamId: string; agentProfileId: string }) => {
+      await apiClient.delete<void>(`/v1/teams/${teamId}/agents/${agentProfileId}`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'teams'] });
+    },
+  });
+}
+
 // 7. API KEYS
 export function useApiKeys() {
   const apiClient = useApiClient();
@@ -754,3 +859,39 @@ export const useSaveFeatureFlag = settingsMutation<{ featureKey: string; enabled
 
 export const useUsageLimits = settingsQuery<UsageLimits>('usage-limits', '/v1/settings/usage-limits');
 export const useUpdateUsageLimits = settingsMutation<Partial<UsageLimits>>('usage-limits', '/v1/settings/usage-limits');
+
+// 10. TENANT PROVISIONING
+// The tenant itself (its id, and the calling admin's JWT for it) is created
+// upstream in EasyDev IAM - this only provisions this product's own
+// per-tenant resources (settings/branding/feature flags/first API key) for a
+// tenant IAM already knows about.
+export interface ProvisionTenantResult {
+  tenantId: string;
+  apiKey: string;
+  plan: string;
+  provisionedAt: string;
+}
+
+export function useProvisionTenant() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (variables: {
+      name: string;
+      plan: 'STARTER' | 'GROWTH' | 'ENTERPRISE';
+      adminEmail: string;
+      adminName: string;
+      logoUrl?: string;
+      primaryColor?: string;
+      timezone?: string;
+      locale?: string;
+    }) => {
+      return apiClient.post<ProvisionTenantResult>('/v1/admin/tenants/provision', variables);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'api-keys'] });
+    },
+  });
+}
