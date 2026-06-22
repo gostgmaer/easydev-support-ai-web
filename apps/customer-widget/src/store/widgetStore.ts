@@ -23,6 +23,17 @@ export interface WidgetCustomer {
   name?: string;
 }
 
+/** Identity params passed through from the embedding tenant's own page (via
+ * embed.js data-user-* attributes -> /embed -> /widget query string) for
+ * customers already logged in on the tenant's site. signature is an HMAC the
+ * TENANT's own backend computed server-side - see Settings > Widget. */
+export interface PendingIdentity {
+  externalUserId: string;
+  email?: string;
+  name?: string;
+  signature: string;
+}
+
 // 2. Zustand Store definition
 interface WidgetState {
   tenantId: string | null;
@@ -43,12 +54,18 @@ interface WidgetState {
   isAgentTyping: boolean;
   isWidgetOpen: boolean;
 
+  // Identified-visitor bootstrap (see PendingIdentity)
+  pendingIdentity: PendingIdentity | null;
+  identityVerified: boolean;
+
   // Actions
   setTenantId: (tenantId: string | null) => void;
   setConfig: (customConfig: Partial<WidgetConfig>) => void;
   setAnonymousId: (anonymousId: string) => void;
   setWidgetSession: (data: { token: string; visitorId: string; sessionId: string }) => void;
   setCustomer: (customer: WidgetCustomer) => void;
+  setPendingIdentity: (identity: PendingIdentity | null) => void;
+  setIdentityVerified: (verified: boolean) => void;
   setMessages: (messages: WidgetMessage[]) => void;
   addMessage: (msg: WidgetMessage) => void;
   setActiveConversationId: (id: string | null) => void;
@@ -72,6 +89,8 @@ export const useWidgetStore = create<WidgetState>((set) => ({
   messages: [],
   isAgentTyping: false,
   isWidgetOpen: false,
+  pendingIdentity: null,
+  identityVerified: false,
 
   setTenantId: (tenantId) => set({ tenantId }),
   setConfig: (customConfig) =>
@@ -80,6 +99,8 @@ export const useWidgetStore = create<WidgetState>((set) => ({
   setWidgetSession: ({ token, visitorId, sessionId }) =>
     set({ sessionToken: token, visitorId, widgetSessionId: sessionId }),
   setCustomer: (customer) => set({ customer }),
+  setPendingIdentity: (pendingIdentity) => set({ pendingIdentity }),
+  setIdentityVerified: (identityVerified) => set({ identityVerified }),
   setMessages: (messages) => set({ messages }),
   addMessage: (msg) =>
     set((state) => {

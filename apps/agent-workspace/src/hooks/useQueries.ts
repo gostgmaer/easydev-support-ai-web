@@ -89,6 +89,23 @@ export function useConversations(view: InboxView, filters: InboxFilters, teamId?
   return query;
 }
 
+// Real consolidated full-text search across the inbox projection - used by the
+// command palette (the standalone /search page covers conversations/tickets/
+// customers as three separate calls instead; this is conversations only).
+export function useGlobalInboxSearch(query: string) {
+  const api = useApiClient();
+  return useQuery<Conversation[]>({
+    queryKey: ['inbox', 'search', 'global', query],
+    queryFn: async () => {
+      const result = await api.get<{ data: Record<string, unknown>[] }>('/v1/inbox/search/global', {
+        query: { q: query, limit: 5 },
+      });
+      return result.data.map(normalizeConversation);
+    },
+    enabled: query.trim().length > 1,
+  });
+}
+
 export function useConversationDetails(conversationId: string | null) {
   const api = useApiClient();
   const updateConversation = useInboxStore((state) => state.updateConversation);

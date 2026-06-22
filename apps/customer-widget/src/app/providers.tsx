@@ -21,11 +21,24 @@ function TenantIdSync({
   const searchParams = useSearchParams();
   const id = searchParams.get('tenantId');
   const setTenantId = useWidgetStore((state) => state.setTenantId);
+  const setPendingIdentity = useWidgetStore((state) => state.setPendingIdentity);
+
   React.useEffect(() => {
     tenantIdRef.current = id;
     onTenantId(id);
     setTenantId(id);
-  }, [id, tenantIdRef, onTenantId, setTenantId]);
+
+    const externalUserId = searchParams.get('externalUserId');
+    const signature = searchParams.get('signature');
+    if (externalUserId && signature) {
+      setPendingIdentity({
+        externalUserId,
+        signature,
+        email: searchParams.get('email') || undefined,
+        name: searchParams.get('name') || undefined,
+      });
+    }
+  }, [id, tenantIdRef, onTenantId, setTenantId, searchParams, setPendingIdentity]);
   return null;
 }
 

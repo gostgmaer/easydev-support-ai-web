@@ -277,10 +277,11 @@ export function useSubmitHelpTicket() {
       const categoryLabel = TICKET_CATEGORY_LABELS[variables.category] ?? variables.category;
       return apiClient.post<RawTicket>('/v1/public/tickets', {
         subject: variables.subject,
-        description: `[Category: ${categoryLabel}]\n\n${variables.description}`,
+        description: variables.description,
         email: variables.email,
         name: variables.name,
         priority: TICKET_PRIORITY_MAP[variables.priority] ?? 'MEDIUM',
+        category: categoryLabel,
       });
     },
     onSuccess: (data, variables) => {

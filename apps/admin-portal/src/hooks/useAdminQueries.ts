@@ -977,6 +977,35 @@ export function useProvisionTenant() {
   });
 }
 
+// 12. WIDGET CONFIGURATION
+export interface WidgetAdminConfig {
+  id: string;
+  widgetName: string;
+  theme: string;
+  primaryColor: string;
+  secondaryColor: string;
+  position: string;
+  allowedDomains: string[];
+  identityVerificationSecret?: string;
+}
+
+export function useWidgetAdminConfig() {
+  const apiClient = useApiClient();
+  return useQuery<WidgetAdminConfig>({
+    queryKey: ['admin', 'widget-config'],
+    queryFn: () => apiClient.get<WidgetAdminConfig>('/v1/widget/config/admin'),
+  });
+}
+
+export function useRotateWidgetIdentitySecret() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiClient.post<WidgetAdminConfig>('/v1/widget/config/admin/rotate-identity-secret'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'widget-config'] }),
+  });
+}
+
 // 11. WEBHOOKS
 export function useWebhooks() {
   const apiClient = useApiClient();

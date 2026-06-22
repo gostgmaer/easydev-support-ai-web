@@ -24,7 +24,7 @@ const CSP = [
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
-  "img-src 'self' data:",
+  `img-src 'self' data: ${apiOrigin}`,
   `connect-src 'self' ${apiOrigin} ${socketOrigin} ${socketWsOrigin}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",

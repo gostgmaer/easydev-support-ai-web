@@ -11,6 +11,11 @@ function EmbedContent() {
   const { getFlag, isLoading } = useFeatureFlags();
   const [isOpen, setIsOpen] = React.useState(false);
 
+  // Forward every param this page received straight through to the inner
+  // widget iframe - tenantId plus the optional identity params embed.js sets
+  // (externalUserId/email/name/signature) for already-logged-in customers.
+  const innerParams = new URLSearchParams(searchParams.toString());
+
   // Notify parent document to resize iframe container on launcher actions.
   // Target the parent's real origin (derived from document.referrer, the only
   // signal a cross-origin iframe has for "who embedded me") rather than '*',
@@ -67,7 +72,7 @@ function EmbedContent() {
       {isOpen && (
         <div className="fixed bottom-20 right-2 w-[370px] h-[570px] rounded-xl border border-neutral-200/80 shadow-2xl bg-white overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
           <iframe
-            src={`/widget?tenantId=${encodeURIComponent(tenantId)}`}
+            src={`/widget?${innerParams.toString()}`}
             className="w-full h-full border-none"
             title="EasyDev AI Support Widget"
           />

@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Inbox, AlertTriangle, User, Settings, CheckSquare, Sparkles } from 'lucide-react';
+import { Search, Inbox, AlertTriangle, User, Settings, CheckSquare, Sparkles, MessageSquare } from 'lucide-react';
 import { FocusTrap } from '@easydev/ui';
 import { useInboxStore } from '../store/inboxStore';
-import { useCreateTicket } from '../hooks/useQueries';
+import { useCreateTicket, useGlobalInboxSearch } from '../hooks/useQueries';
 import { useUpdateAiStatus } from '../hooks/useAiQueries';
 
 interface CommandItem {
   id: string;
   title: string;
-  category: 'Actions' | 'Navigation' | 'Help';
+  category: 'Actions' | 'Navigation' | 'Help' | 'Conversations';
   icon: React.ComponentType<{ className?: string }>;
   action: () => void;
 }
@@ -23,10 +23,13 @@ export function CommandPalette({ isOpen, onClose }: { isOpen: boolean; onClose: 
   );
   const updateAiStatus = useUpdateAiStatus();
   const createTicket = useCreateTicket();
+  const setActiveConversationId = useInboxStore((state) => state.setActiveConversationId);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: searchResults = [] } = useGlobalInboxSearch(searchQuery);
 
   const commands: CommandItem[] = useMemo(() => {
     const items: CommandItem[] = [
@@ -103,9 +106,25 @@ export function CommandPalette({ isOpen, onClose }: { isOpen: boolean; onClose: 
     return items;
   }, [activeConversationId, activeConversation, setSelectedView, router, updateAiStatus, createTicket]);
 
-  const filteredCommands = commands.filter((c) =>
-    c.title.toLowerCase().includes(searchQuery.toLowerCase())
+  const conversationItems: CommandItem[] = useMemo(
+    () =>
+      searchResults.map((conv) => ({
+        id: `conv-${conv.id}`,
+        title: conv.lastMessage ? conv.lastMessage.slice(0, 80) : `Conversation ${conv.id}`,
+        category: 'Conversations',
+        icon: MessageSquare,
+        action: () => {
+          setActiveConversationId(conv.id);
+          router.push('/inbox/my');
+        },
+      })),
+    [searchResults, setActiveConversationId, router],
   );
+
+  const filteredCommands = useMemo(() => {
+    const staticMatches = commands.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    return searchQuery.trim().length > 1 ? [...staticMatches, ...conversationItems] : staticMatches;
+  }, [commands, conversationItems, searchQuery]);
 
   useEffect(() => {
     if (!isOpen) return;

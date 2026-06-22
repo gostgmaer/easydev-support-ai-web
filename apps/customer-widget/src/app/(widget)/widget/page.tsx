@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { useWidgetStore } from '../../../store/widgetStore';
-import { useResumeWidgetConversation, useStartWidgetConversation } from '../../../hooks/useWidgetQueries';
+import { useResumeWidgetConversation, useStartWidgetConversation, useVerifyWidgetIdentity } from '../../../hooks/useWidgetQueries';
 import { MessageSquare, Ticket } from 'lucide-react';
 import { Spinner } from '@easydev/ui';
 
@@ -11,6 +11,9 @@ export default function WidgetWelcomePage() {
   const router = useRouter();
   const config = useWidgetStore((state) => state.config);
   const customer = useWidgetStore((state) => state.customer);
+  const sessionToken = useWidgetStore((state) => state.sessionToken);
+  const pendingIdentity = useWidgetStore((state) => state.pendingIdentity);
+  const identityVerified = useWidgetStore((state) => state.identityVerified);
 
   const [name, setName] = React.useState('');
   const [email, setEmail] = React.useState('');
@@ -18,12 +21,33 @@ export default function WidgetWelcomePage() {
 
   const { data: conversation, isError } = useResumeWidgetConversation();
   const startConversationMutation = useStartWidgetConversation();
+  const verifyIdentityMutation = useVerifyWidgetIdentity();
 
   // A disabled query (still waiting on the session bootstrap) reports
   // isLoading: false in TanStack Query v5, so check for "no answer yet"
   // directly instead - otherwise this would flash the welcome-back UI
   // for first-time visitors before the resume probe has even run.
   const isResolving = !conversation && !isError;
+
+  // If the embedding tenant identified this visitor (signed server-side),
+  // verify it once the session is ready, then skip the pre-chat form entirely.
+  React.useEffect(() => {
+    if (!sessionToken || !pendingIdentity || identityVerified || verifyIdentityMutation.isPending) return;
+    verifyIdentityMutation.mutate(pendingIdentity);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionToken, pendingIdentity, identityVerified]);
+
+  React.useEffect(() => {
+    if (identityVerified && isError && pendingIdentity?.email && !startConversationMutation.isPending) {
+      startConversationMutation.mutate(
+        { email: pendingIdentity.email, name: pendingIdentity.name },
+        { onSuccess: () => router.push('/chat') },
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identityVerified, isError, pendingIdentity]);
+
+  const isAutoStarting = !!pendingIdentity?.email && (verifyIdentityMutation.isPending || (identityVerified && startConversationMutation.isPending));
 
   const handlePreChatSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +62,7 @@ export default function WidgetWelcomePage() {
     router.push('/chat');
   };
 
-  if (isResolving) {
+  if (isResolving || isAutoStarting) {
     return (
       <div className="h-full flex items-center justify-center bg-neutral-50/50">
         <Spinner className="h-6 w-6 text-neutral-400" />

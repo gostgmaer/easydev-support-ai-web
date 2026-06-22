@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Settings, Image, Clock, ShieldAlert, Trash2, Plus, Building2, AlertTriangle, Copy } from 'lucide-react';
+import { Settings, Image, Clock, ShieldAlert, Trash2, Plus, Building2, AlertTriangle, Copy, Eye, EyeOff, RefreshCw, Puzzle } from 'lucide-react';
 import {
   useTenantSettings,
   useUpdateTenantSettings,
@@ -20,12 +20,14 @@ import {
   useUsageLimits,
   useUpdateUsageLimits,
   useProvisionTenant,
+  useWidgetAdminConfig,
+  useRotateWidgetIdentitySecret,
 } from '@/hooks/useAdminQueries';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-type Tab = 'general' | 'branding' | 'business-hours' | 'holidays' | 'security' | 'feature-flags' | 'usage-limits' | 'provisioning';
-const TABS: Tab[] = ['general', 'branding', 'business-hours', 'holidays', 'security', 'feature-flags', 'usage-limits', 'provisioning'];
+type Tab = 'general' | 'branding' | 'business-hours' | 'holidays' | 'security' | 'feature-flags' | 'usage-limits' | 'provisioning' | 'widget';
+const TABS: Tab[] = ['general', 'branding', 'business-hours', 'holidays', 'security', 'feature-flags', 'usage-limits', 'provisioning', 'widget'];
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -75,6 +77,7 @@ export default function SettingsPage() {
         {activeTab === 'feature-flags' && <FeatureFlagsTab />}
         {activeTab === 'usage-limits' && <UsageLimitsTab />}
         {activeTab === 'provisioning' && <ProvisioningTab />}
+        {activeTab === 'widget' && <WidgetTab />}
       </div>
     </div>
   );
@@ -636,6 +639,73 @@ function ProvisioningTab() {
           {provisionMutation.isPending ? 'Provisioning...' : 'Provision Tenant'}
         </button>
       </form>
+    </div>
+  );
+}
+
+function WidgetTab() {
+  const { data: config, isLoading } = useWidgetAdminConfig();
+  const rotateMutation = useRotateWidgetIdentitySecret();
+  const [revealed, setRevealed] = React.useState(false);
+
+  const handleRotate = () => {
+    if (confirm('Rotate the identity verification secret? Any signatures your backend has already computed with the old secret will stop working immediately.')) {
+      rotateMutation.mutate(undefined, { onSuccess: () => setRevealed(true) });
+    }
+  };
+
+  if (isLoading) {
+    return <p className="text-xs text-neutral-400">Loading widget configuration...</p>;
+  }
+
+  return (
+    <div className="max-w-xl space-y-6 text-xs text-neutral-800">
+      <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5 border-b border-neutral-50 pb-2">
+        <Puzzle className="h-4 w-4 text-primary-500" />
+        <span>Widget Identity Verification</span>
+      </h2>
+      <p className="text-neutral-400">
+        If you identify logged-in customers to the chat widget, your own backend must sign each identity with this
+        secret (HMAC SHA256 of <code className="bg-neutral-100 px-1 rounded">externalUserId:email</code>) before
+        passing it to the widget - never expose this secret in browser code.
+      </p>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="font-semibold text-neutral-600">Verification Secret</label>
+        <div className="flex items-center gap-2 bg-white border border-neutral-200 rounded p-2.5 font-mono text-neutral-800">
+          <span className="flex-1 break-all">
+            {revealed ? config?.identityVerificationSecret : '•'.repeat(48)}
+          </span>
+          <button
+            type="button"
+            onClick={() => setRevealed((v) => !v)}
+            className="p-1 hover:bg-neutral-100 rounded shrink-0"
+            aria-label={revealed ? 'Hide secret' : 'Reveal secret'}
+          >
+            {revealed ? <EyeOff className="h-3.5 w-3.5 text-neutral-500" /> : <Eye className="h-3.5 w-3.5 text-neutral-500" />}
+          </button>
+          {revealed && (
+            <button
+              type="button"
+              onClick={() => config?.identityVerificationSecret && navigator.clipboard.writeText(config.identityVerificationSecret)}
+              className="p-1 hover:bg-neutral-100 rounded shrink-0"
+              aria-label="Copy secret"
+            >
+              <Copy className="h-3.5 w-3.5 text-neutral-500" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={handleRotate}
+        disabled={rotateMutation.isPending}
+        className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-900 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        <span>{rotateMutation.isPending ? 'Rotating...' : 'Rotate Secret'}</span>
+      </button>
     </div>
   );
 }

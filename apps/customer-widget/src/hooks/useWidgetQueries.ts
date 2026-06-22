@@ -132,6 +132,38 @@ export function useEnsureWidgetSession() {
   });
 }
 
+interface IdentityResponse {
+  externalUserId: string;
+}
+
+/** Verifies an HMAC-signed identity passed through from the embedding
+ * tenant's own page (see widgetStore.PendingIdentity) - the tenant's own
+ * backend computed the signature server-side using the secret from
+ * Settings > Widget, so a successful verify proves this visitor really is
+ * who the tenant's page says they are. */
+export function useVerifyWidgetIdentity() {
+  const apiClient = useApiClient();
+  const anonymousId = useWidgetStore((state) => state.anonymousId);
+  const setCustomer = useWidgetStore((state) => state.setCustomer);
+  const setIdentityVerified = useWidgetStore((state) => state.setIdentityVerified);
+
+  return useMutation({
+    mutationFn: async (identity: { externalUserId: string; email?: string; name?: string; signature: string }) => {
+      return apiClient.post<IdentityResponse>('/v1/widget/auth/verify', {
+        anonymousId,
+        verificationMethod: 'HMAC_SHA256',
+        ...identity,
+      });
+    },
+    onSuccess: (_data, variables) => {
+      setIdentityVerified(true);
+      if (variables.email) {
+        setCustomer({ email: variables.email, name: variables.name });
+      }
+    },
+  });
+}
+
 // 2. CONVERSATION LIFECYCLE
 interface WidgetConversationResponse {
   id: string;
@@ -233,6 +265,39 @@ export function useSendWidgetMessage() {
   });
 }
 
+// Saved to local disk on the backend (no External File Upload Service
+// integration exists for this surface) - see WidgetChatController.uploadAttachment.
+export function useUploadWidgetAttachment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  const addMessage = useWidgetStore((state) => state.addMessage);
+
+  return useMutation({
+    mutationFn: async ({ conversationId, file }: { conversationId: string; file: File }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return apiClient.post<{ message: RawMessage; attachment: RawMessageAttachment }>(
+        `/v1/widget/conversations/${conversationId}/attachments`,
+        formData,
+      );
+    },
+    onMutate: async ({ file }) => {
+      const tempMessage: WidgetMessage = {
+        id: `temp-${Date.now()}`,
+        senderType: 'customer',
+        senderName: 'You',
+        content: file.name,
+        createdAt: new Date().toISOString(),
+        attachments: [{ name: file.name, url: URL.createObjectURL(file), size: file.size }],
+      };
+      addMessage(tempMessage);
+    },
+    onSettled: (_data, _error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['widget', 'messages', variables.conversationId] });
+    },
+  });
+}
+
 // 4. TICKET CREATION (Flow 2)
 export type WidgetTicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
 
@@ -254,6 +319,75 @@ export function useCreateWidgetTicket() {
       const { conversationId, ...body } = variables;
       return apiClient.post<CreateTicketResponse>(
         `/v1/widget/conversations/${conversationId}/ticket`,
+        body,
+      );
+    },
+  });
+}
+
+// 5. KNOWLEDGE SEARCH
+// Same public, unauthenticated knowledge-base surface help-center uses
+// (v1/public/knowledge/*) - only needs the x-tenant-id header, not a widget
+// session token, since it's read-only published content.
+export interface WidgetArticleSummary {
+  id: string;
+  title: string;
+  slug: string;
+}
+
+interface RawDocument {
+  id: string;
+  title: string;
+  slug: string;
+  content?: string;
+}
+
+interface RawSearchResult {
+  document: RawDocument;
+  score: number;
+}
+
+export function useWidgetKnowledgeSearch(query: string) {
+  const apiClient = useApiClient();
+  const tenantId = useWidgetStore((state) => state.tenantId);
+
+  return useQuery<WidgetArticleSummary[]>({
+    queryKey: ['widget', 'knowledge-search', tenantId, query],
+    queryFn: async () => {
+      const raw = await apiClient.post<RawSearchResult[]>('/v1/public/knowledge/search', { query });
+      return raw.map((r) => ({ id: r.document.id, title: r.document.title, slug: r.document.slug }));
+    },
+    enabled: !!tenantId && query.trim().length > 1,
+  });
+}
+
+export interface WidgetArticleDetail extends WidgetArticleSummary {
+  content: string;
+}
+
+export function useWidgetArticle(slug: string | null) {
+  const apiClient = useApiClient();
+  const tenantId = useWidgetStore((state) => state.tenantId);
+
+  return useQuery<WidgetArticleDetail>({
+    queryKey: ['widget', 'knowledge-article', tenantId, slug],
+    queryFn: async () => {
+      const raw = await apiClient.get<RawDocument>(`/v1/public/knowledge/documents/${slug}`);
+      return { id: raw.id, title: raw.title, slug: raw.slug, content: raw.content || '' };
+    },
+    enabled: !!tenantId && !!slug,
+  });
+}
+
+// 6. FEEDBACK / CSAT
+export function useSubmitWidgetFeedback() {
+  const apiClient = useApiClient();
+
+  return useMutation({
+    mutationFn: async (variables: { conversationId: string; rating: number; feedback?: string }) => {
+      const { conversationId, ...body } = variables;
+      return apiClient.post<{ submitted: boolean }>(
+        `/v1/widget/conversations/${conversationId}/feedback`,
         body,
       );
     },

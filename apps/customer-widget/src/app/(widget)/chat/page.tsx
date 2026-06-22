@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { useWidgetStore } from '../../../store/widgetStore';
-import { useConversationTimeline, useSendWidgetMessage } from '../../../hooks/useWidgetQueries';
+import { useConversationTimeline, useSendWidgetMessage, useUploadWidgetAttachment } from '../../../hooks/useWidgetQueries';
 import { useWidgetRealtime } from '../../../hooks/useWidgetRealtime';
 import { WidgetChat, WidgetInput, Spinner, ConnectionStatus } from '@easydev/ui';
 import { useRealtimeStore } from '@easydev/realtime';
@@ -28,7 +28,9 @@ export default function WidgetChatPage() {
   const { isLoading } = useConversationTimeline(activeConversationId);
   const { emitTyping } = useWidgetRealtime(activeConversationId);
   const sendMessageMutation = useSendWidgetMessage();
+  const uploadAttachmentMutation = useUploadWidgetAttachment();
   const connectionStatus = useRealtimeStore((state) => state.connectionStatus);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleInputChange = (val: string) => {
     setComposerText(val);
@@ -52,6 +54,13 @@ export default function WidgetChatPage() {
   const handleSuggestedQuestion = (question: string) => {
     if (!activeConversationId) return;
     sendMessageMutation.mutate({ conversationId: activeConversationId, content: question });
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !activeConversationId) return;
+    uploadAttachmentMutation.mutate({ conversationId: activeConversationId, file });
   };
 
   const handleHumanEscalation = () => {
@@ -167,10 +176,12 @@ export default function WidgetChatPage() {
 
       {/* Input composer */}
       <div className="bg-white shrink-0 relative">
+        <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
         <WidgetInput
           value={composerText}
           onValueChange={handleInputChange}
           onSend={handleSendMessage}
+          onAttach={() => fileInputRef.current?.click()}
           isSending={sendMessageMutation.isPending}
           placeholder="Ask a question or type a message..."
           className="border-t border-neutral-100"

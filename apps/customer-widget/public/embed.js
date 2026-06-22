@@ -17,10 +17,27 @@
 
   const baseUrl = currentScript.src.replace('/embed.js', '');
 
+  // Optional: for tenants identifying an already-logged-in customer to the
+  // widget. data-user-hash must be computed server-side by the tenant's own
+  // backend (HMAC SHA256 of "externalUserId:email" using the secret from
+  // Settings > Widget) - never compute this in browser JS.
+  const userId = currentScript.getAttribute('data-user-id');
+  const userEmail = currentScript.getAttribute('data-user-email');
+  const userName = currentScript.getAttribute('data-user-name');
+  const userHash = currentScript.getAttribute('data-user-hash');
+
+  const params = new URLSearchParams({ tenantId: tenantId });
+  if (userId && userHash) {
+    params.set('externalUserId', userId);
+    params.set('signature', userHash);
+    if (userEmail) params.set('email', userEmail);
+    if (userName) params.set('name', userName);
+  }
+
   // 2. Create the widget iframe container
   const iframe = document.createElement('iframe');
   iframe.id = 'easydev-chat-widget-frame';
-  iframe.src = `${baseUrl}/embed?tenantId=${encodeURIComponent(tenantId)}`;
+  iframe.src = `${baseUrl}/embed?${params.toString()}`;
   
   // Style the iframe as a small floating launcher initially
   const widgetStyles = {
