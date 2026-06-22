@@ -14,15 +14,23 @@ function originOf(envValue: string | undefined, fallback: string): string {
 const apiOrigin = originOf(process.env.NEXT_PUBLIC_API_BASE_URL, 'http://localhost:3333');
 
 // No eval/inline-script usage exists anywhere in this app (confirmed via audit),
-// so script-src can stay strict. style-src needs 'unsafe-inline' for Next.js/
-// Tailwind's runtime style injection - the one pragmatic exception.
+// so the production script-src stays strict. Development needs the standard
+// Next.js dev-server exceptions: 'unsafe-eval' for @next/react-refresh-utils
+// HMR runtime, and 'unsafe-inline' for Next's HMR-injected <script> tags. The
+// production build never includes those, so we keep the strict policy there.
+const isDev = process.env.NODE_ENV !== 'production';
+
+const scriptSrc = isDev
+  ? "'self' 'unsafe-inline' 'unsafe-eval'"
+  : "'self'";
+
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  `script-src ${scriptSrc}`,
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
   "img-src 'self' data:",
-  `connect-src 'self' ${apiOrigin}`,
+  `connect-src 'self' ${apiOrigin}${isDev ? ' ws:' : ''}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
