@@ -153,7 +153,7 @@ export default function SystemHealthPage() {
                 {incidents.map((incident) => (
                   <div key={incident.id} className="flex justify-between items-center py-3.5 hover:bg-neutral-50 px-2 rounded transition-all">
                     <div className="space-y-1">
-                      <span className="font-bold text-neutral-800 block flex items-center gap-1.5">
+                      <span className="font-bold text-neutral-800 flex items-center gap-1.5">
                         <AlertTriangle className="h-4.5 w-4.5 text-danger" />
                         <span>{incident.title}</span>
                       </span>
