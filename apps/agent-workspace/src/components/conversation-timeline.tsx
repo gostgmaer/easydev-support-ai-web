@@ -8,13 +8,19 @@ import { useConversationMessages, useMarkConversationRead } from '../hooks/useQu
 import { useRealtime } from '../hooks/useRealtime';
 import { toMessageItem } from '../lib/ui-adapters';
 
+// Shared stable reference for the "no typing state" case - returning a fresh
+// {} literal from the selector below on every call makes useSyncExternalStore
+// see a "changed" snapshot on every render (compared by reference), which
+// triggers an infinite render loop ("Maximum update depth exceeded").
+const EMPTY_TYPING_STATE: Record<string, { name: string; timestamp: number }> = {};
+
 export function ConversationTimeline() {
   const { user } = useAuth();
   const activeConversationId = useInboxStore((state) => state.activeConversationId);
   const { data: messages = [], isLoading } = useConversationMessages(activeConversationId);
   const typingUsers = useConversationStore((state) => {
-    if (!activeConversationId) return {};
-    return state.typingStates[activeConversationId] || {};
+    if (!activeConversationId) return EMPTY_TYPING_STATE;
+    return state.typingStates[activeConversationId] || EMPTY_TYPING_STATE;
   });
 
   const { emitRead } = useRealtime(user?.id);

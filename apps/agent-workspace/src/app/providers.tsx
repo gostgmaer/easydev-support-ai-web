@@ -132,7 +132,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider defaultTheme="light">
       <AuthProvider baseUrl={API_BASE_URL} onUnauthenticated={() => router.replace('/login')}>
-        <ObservabilityProvider appName="agent-workspace">
+        <ObservabilityProvider appName="agent-workspace" backendUrl={`${API_BASE_URL}/v1/observability/telemetry`}>
           <ObservabilityBridge>
             <TenantBrandingBridge>
               <PermissionProvider>

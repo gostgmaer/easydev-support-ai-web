@@ -89,7 +89,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
       <AuthProvider baseUrl={API_BASE_URL} onUnauthenticated={() => router.replace('/login')}>
-        <ObservabilityProvider appName="admin-portal">
+        <ObservabilityProvider appName="admin-portal" backendUrl={`${API_BASE_URL}/v1/observability/telemetry`}>
           <ObservabilityBridge>
             <TenantBrandingBridge>
               <PermissionProvider>

@@ -11,6 +11,7 @@ import { useEnsureWidgetSession, useWidgetBranding } from '../../hooks/useWidget
 export default function WidgetWindowLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const config = useWidgetStore((state) => state.config);
+  const sessionToken = useWidgetStore((state) => state.sessionToken);
   // Public, no session token required - loads independently of (and usually
   // before) the session bootstrap below so real tenant branding shows up
   // immediately instead of the generic local defaults the whole time.
@@ -39,6 +40,23 @@ export default function WidgetWindowLayout({ children }: { children: React.React
         <p className="text-xs font-semibold text-neutral-500">
           This support widget isn&apos;t available here.
         </p>
+      </div>
+    );
+  }
+
+  // children (the chat/help/tickets/history pages) call conversation and
+  // message hooks that authenticate with this session token - mounting them
+  // before it exists sends those requests with no Authorization header at
+  // all, 401ing with "Missing Tenant ID or session token" even though the
+  // session bootstrap above is genuinely still in flight, not failed.
+  if (!sessionToken) {
+    return (
+      <div
+        className="w-full max-w-md h-[600px] border border-neutral-200 bg-white rounded-xl shadow-2xl flex items-center justify-center"
+        role="region"
+        aria-label="Customer Support Widget"
+      >
+        <div className="h-6 w-6 rounded-full border-2 border-neutral-200 border-t-primary-500 animate-spin" />
       </div>
     );
   }

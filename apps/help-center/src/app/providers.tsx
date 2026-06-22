@@ -18,16 +18,25 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3
 function TenantIdSync({
   tenantIdRef,
   onTenantId,
+  onResolved,
 }: {
   tenantIdRef: React.MutableRefObject<string | null>;
   onTenantId: (id: string | null) => void;
+  onResolved: () => void;
 }) {
   const searchParams = useSearchParams();
   const id = searchParams.get('tenantId');
   React.useEffect(() => {
-    tenantIdRef.current = id;
-    onTenantId(id);
-  }, [id, tenantIdRef, onTenantId]);
+    // Sticky: internal navigation can land on a URL with no ?tenantId= at
+    // all - useSearchParams() re-runs on every route change, so without this
+    // guard that later "id is null" re-run would overwrite an already-
+    // resolved tenantId. Only ever apply a real value; never erase one.
+    if (id) {
+      tenantIdRef.current = id;
+      onTenantId(id);
+    }
+    onResolved();
+  }, [id, tenantIdRef, onTenantId, onResolved]);
   return null;
 }
 
@@ -50,22 +59,25 @@ function ObservabilityBridge({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Defers mounting FeatureFlagProvider's fetch until AuthProvider's mount-time resync
- * (exchanging the refresh cookie for a session) has settled. Firing earlier means
- * useTenantStore.current is still null even for a genuinely logged-in user, causing a
- * spurious 401 "Missing Tenant ID" race on every fresh load/reload. */
-function FeatureFlagsBridge({ children }: { children: React.ReactNode }) {
+/** Defers mounting this entire subtree - not just FeatureFlagProvider's own query - until
+ * BOTH (a) AuthProvider's mount-time resync (exchanging the refresh cookie for a session)
+ * has settled, and (b) TenantIdSync's useSearchParams()-driven effect has resolved the
+ * ?tenantId= ref at least once. Either firing late means getTenantId() still returns null
+ * for a genuinely resolvable tenant, causing a spurious 400/401 "Missing Tenant ID" race on
+ * every fresh load/reload - and that race hits AnalyticsProvider's HttpSink and any page
+ * content's own data hooks just as much as FeatureFlagProvider's query, so gating only the
+ * latter's `enabled` prop isn't enough; nothing below this point may mount until ready. */
+function FeatureFlagsBridge({ children, tenantResolved }: { children: React.ReactNode; tenantResolved: boolean }) {
   const { status } = useAuth();
-  return (
-    <FeatureFlagProvider enabled={status === 'authenticated' || status === 'unauthenticated'}>
-      {children}
-    </FeatureFlagProvider>
-  );
+  const ready = tenantResolved && (status === 'authenticated' || status === 'unauthenticated');
+  if (!ready) return null;
+  return <FeatureFlagProvider>{children}</FeatureFlagProvider>;
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const tenantIdRef = React.useRef<string | null>(null);
   const [, setTenantId] = React.useState<string | null>(null);
+  const [tenantResolved, setTenantResolved] = React.useState(false);
   const apiConfig = React.useMemo(
     () => ({ baseUrl: API_BASE_URL, getTenantId: () => tenantIdRef.current }),
     []
@@ -75,14 +87,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider>
       <ApiProvider config={apiConfig}>
         <React.Suspense fallback={null}>
-          <TenantIdSync tenantIdRef={tenantIdRef} onTenantId={setTenantId} />
+          <TenantIdSync
+            tenantIdRef={tenantIdRef}
+            onTenantId={setTenantId}
+            onResolved={() => setTenantResolved(true)}
+          />
         </React.Suspense>
         <AuthProvider baseUrl={API_BASE_URL}>
-          <ObservabilityProvider appName="help-center">
+          <ObservabilityProvider appName="help-center" backendUrl={`${API_BASE_URL}/v1/observability/telemetry`}>
             <ObservabilityBridge>
               <TenantBrandingBridge>
                 <PermissionProvider>
-                  <FeatureFlagsBridge>
+                  <FeatureFlagsBridge tenantResolved={tenantResolved}>
                     <AnalyticsProvider app="help-center">
                       <ErrorBoundary client={null as any /* Will resolve from context dynamically or fallback inside ErrorBoundary */}>
                         {children}
