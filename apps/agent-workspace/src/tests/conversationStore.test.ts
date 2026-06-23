@@ -18,7 +18,6 @@ describe('ConversationStore Unit Tests', () => {
       messages: {},
       typingStates: {},
       drafts: {},
-      aiDrafts: {},
     });
   });
 
