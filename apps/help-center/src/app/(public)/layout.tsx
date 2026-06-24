@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@easydev/auth';
+import { useTenantBranding } from '@easydev/design-system';
 import {
   Search,
   BookOpen,
@@ -24,6 +25,7 @@ export default function PublicPortalLayout({ children }: { children: React.React
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, isAuthenticated } = useAuth();
+  const { branding } = useTenantBranding();
 
   const [searchVal, setSearchVal] = React.useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -85,9 +87,14 @@ export default function PublicPortalLayout({ children }: { children: React.React
       <header className="sticky top-0 bg-white border-b border-neutral-100 z-50 shadow-3xs shrink-0">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="h-7 w-7 bg-neutral-900 text-white rounded flex items-center justify-center font-bold text-sm tracking-wider">
-              ED
-            </div>
+            {branding?.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- tenant-supplied URL, not a static asset Next's image optimizer can use
+              <img src={branding.logoUrl} alt="" className="h-7 w-7 rounded object-contain" />
+            ) : (
+              <div className="h-7 w-7 bg-neutral-900 text-white rounded flex items-center justify-center font-bold text-sm tracking-wider">
+                ED
+              </div>
+            )}
             <span className="font-bold text-neutral-900 text-sm tracking-tight group-hover:text-neutral-700 transition">
               EasyDev Help Center
             </span>

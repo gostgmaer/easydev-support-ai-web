@@ -25,7 +25,7 @@ export default function WidgetChatPage() {
     }
   }, [activeConversationId, router]);
 
-  const { isLoading } = useConversationTimeline(activeConversationId);
+  const { isLoading, isError: timelineFailed } = useConversationTimeline(activeConversationId);
   const { emitTyping } = useWidgetRealtime(activeConversationId);
   const sendMessageMutation = useSendWidgetMessage();
   const uploadAttachmentMutation = useUploadWidgetAttachment();
@@ -136,7 +136,13 @@ export default function WidgetChatPage() {
 
       {/* Timeline Scroll Area */}
       <div className="flex-1 overflow-y-auto min-h-0 bg-neutral-50/30">
-        {mappedMessages.length === 0 ? (
+        {timelineFailed ? (
+          <div className="flex flex-col items-center justify-center p-8 text-center space-y-3 h-full">
+            <Bot className="h-10 w-10 text-danger-300" />
+            <p className="font-bold text-neutral-800">Couldn&apos;t load this conversation</p>
+            <p className="text-neutral-400 max-w-[200px]">Please check your connection and try again.</p>
+          </div>
+        ) : mappedMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 text-center space-y-3 h-full">
             <Bot className="h-10 w-10 text-neutral-300" />
             <p className="font-bold text-neutral-800">No messages yet</p>

@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { RequireAuth, useAuth } from '@easydev/auth';
 import { useTenantStore } from '@easydev/stores';
-import { AdminLayout } from '@easydev/ui';
+import { AdminLayout, Avatar } from '@easydev/ui';
+import { useBranding } from '@/hooks/useAdminQueries';
 import {
   LayoutDashboard,
   BarChart3,
@@ -28,6 +29,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { tenant, logout, switchTenant } = useAuth();
   const availableTenants = useTenantStore((state) => state.available);
   const switching = useTenantStore((state) => state.switching);
+  // The tenant object from useAuth() comes from IAM (set at tenant
+  // provisioning) - it's a different store than this app's own Settings >
+  // Branding page, which reads/writes /v1/settings/branding. The logo an
+  // admin actually uploads there only ever shows up via this query.
+  const { data: branding } = useBranding();
 
   const handleSwitchTenant = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const tenantId = event.target.value;
@@ -82,9 +88,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const orgSwitcher = (
     <div className="flex items-center justify-between w-full p-3 bg-neutral-50 border-b border-neutral-200">
-      <div className="flex flex-col text-left">
-        <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest leading-none">Active Tenant</span>
-        <span className="text-xs font-extrabold text-neutral-800 truncate mt-1 max-w-[150px]">{tenant?.name || 'Default Org'}</span>
+      <div className="flex items-center gap-2">
+        <Avatar src={branding?.logoUrl} name={tenant?.name || 'Default Org'} size="xs" />
+        <div className="flex flex-col text-left">
+          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest leading-none">Active Tenant</span>
+          <span className="text-xs font-extrabold text-neutral-800 truncate mt-1 max-w-[150px]">{tenant?.name || 'Default Org'}</span>
+        </div>
       </div>
       {availableTenants.length > 1 && (
         <select

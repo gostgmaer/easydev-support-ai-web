@@ -3,6 +3,7 @@
 import React, { use, useMemo, useState } from 'react';
 import { CheckCircle2, Link2, XCircle } from 'lucide-react';
 import { TicketSidebar, AuditTimeline, Section, type TimelineEntry } from '@easydev/ui';
+import { Can } from '@easydev/permissions';
 import { ConversationPriority, TicketApproval } from '../../../../types';
 import { useTicketDetails, useUpdateTicket, useAddTicketComment } from '../../../../hooks/useQueries';
 import { toTicketDetails } from '../../../../lib/ui-adapters';
@@ -91,14 +92,20 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
               <div key={app.id} className="flex items-center justify-between rounded border border-neutral-200 bg-neutral-50 p-3 text-sm">
                 <span className="font-medium text-neutral-800">Approver: {app.approverId}</span>
                 {app.status === 'pending' ? (
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => handleApprovalUpdate(app.id, 'approved')} className="rounded p-1.5 text-success hover:bg-success/15" aria-label="Approve">
-                      <CheckCircle2 className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => handleApprovalUpdate(app.id, 'rejected')} className="rounded p-1.5 text-danger hover:bg-danger/15" aria-label="Reject">
-                      <XCircle className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <Can
+                    resource="ticket"
+                    action="resolve"
+                    fallback={<span className="text-xs font-bold uppercase text-neutral-400">Pending</span>}
+                  >
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleApprovalUpdate(app.id, 'approved')} className="rounded p-1.5 text-success hover:bg-success/15" aria-label="Approve">
+                        <CheckCircle2 className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleApprovalUpdate(app.id, 'rejected')} className="rounded p-1.5 text-danger hover:bg-danger/15" aria-label="Reject">
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </Can>
                 ) : (
                   <span className="text-xs font-bold uppercase text-neutral-500">{app.status}</span>
                 )}

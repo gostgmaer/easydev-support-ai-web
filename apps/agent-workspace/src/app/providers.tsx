@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AuthProvider, useAuth } from '@easydev/auth';
 import { PermissionProvider } from '@easydev/permissions';
 import { FeatureFlagProvider } from '@easydev/feature-flags';
-import { ThemeProvider, TenantBrandingProvider } from '@easydev/design-system';
+import { TenantBrandingProvider } from '@easydev/design-system';
 import { useInboxStore } from '../store/inboxStore';
 import { useRealtime } from '../hooks/useRealtime';
 import { CommandPalette } from '../components/command-palette';
@@ -130,22 +130,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   return (
-    <ThemeProvider defaultTheme="light">
-      <AuthProvider baseUrl={API_BASE_URL} onUnauthenticated={() => router.replace('/login')}>
-        <ObservabilityProvider appName="agent-workspace" backendUrl={`${API_BASE_URL}/v1/observability/telemetry`}>
-          <ObservabilityBridge>
-            <TenantBrandingBridge>
-              <PermissionProvider>
-                <FeatureFlagsBridge>
-                  <ErrorBoundary>
-                    <WorkspaceShell>{children}</WorkspaceShell>
-                  </ErrorBoundary>
-                </FeatureFlagsBridge>
-              </PermissionProvider>
-            </TenantBrandingBridge>
-          </ObservabilityBridge>
-        </ObservabilityProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <AuthProvider baseUrl={API_BASE_URL} onUnauthenticated={() => router.replace('/login')}>
+      <ObservabilityProvider appName="agent-workspace" backendUrl={`${API_BASE_URL}/v1/observability/telemetry`}>
+        <ObservabilityBridge>
+          <TenantBrandingBridge>
+            <PermissionProvider>
+              <FeatureFlagsBridge>
+                <ErrorBoundary>
+                  <WorkspaceShell>{children}</WorkspaceShell>
+                </ErrorBoundary>
+              </FeatureFlagsBridge>
+            </PermissionProvider>
+          </TenantBrandingBridge>
+        </ObservabilityBridge>
+      </ObservabilityProvider>
+    </AuthProvider>
   );
 }
