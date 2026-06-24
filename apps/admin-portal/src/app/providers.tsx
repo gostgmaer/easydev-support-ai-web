@@ -8,16 +8,25 @@ import { ApiClientError } from '@easydev/api-client';
 import { PermissionProvider } from '@easydev/permissions';
 import { FeatureFlagProvider } from '@easydev/feature-flags';
 import { AnalyticsProvider } from '@easydev/analytics';
-import { ThemeProvider, TenantBrandingProvider } from '@easydev/design-system';
+import { TenantBrandingProvider } from '@easydev/design-system';
 import { ObservabilityProvider, useTelemetry, ErrorBoundary } from '@easydev/observability';
+import { useBranding } from '@/hooks/useAdminQueries';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333';
 
-/** Applies the active tenant's brand colors once a session is resolved; falls back to the
- * default palette while unauthenticated (e.g. on the login page) or for unbranded tenants. */
+/** Applies the active tenant's brand colors/logo once a session is resolved; falls back to
+ * the default palette while unauthenticated (e.g. on the login page) or for unbranded
+ * tenants. Sourced from this app's own Settings > Branding (/v1/settings/branding) -
+ * NOT useAuth()'s tenant object, which comes from IAM (set at tenant provisioning) and is a
+ * different store than what the Settings > Branding page actually reads and writes. */
 function TenantBrandingBridge({ children }: { children: React.ReactNode }) {
-  const { tenant } = useAuth();
-  return <TenantBrandingProvider branding={tenant?.branding ?? null}>{children}</TenantBrandingProvider>;
+  const { status } = useAuth();
+  const { data: branding } = useBranding();
+  return (
+    <TenantBrandingProvider branding={status === 'authenticated' ? branding ?? null : null}>
+      {children}
+    </TenantBrandingProvider>
+  );
 }
 
 /** Synchronizes the authenticated user and tenant states with the telemetry client context. */
@@ -87,24 +96,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // incomplete duplicate (no refresh, no 401 handling) for every page in
   // the app, which is exactly what was happening before this was removed.
   return (
-    <ThemeProvider>
-      <AuthProvider baseUrl={API_BASE_URL} onUnauthenticated={() => router.replace('/login')}>
-        <ObservabilityProvider appName="admin-portal" backendUrl={`${API_BASE_URL}/v1/observability/telemetry`}>
-          <ObservabilityBridge>
-            <TenantBrandingBridge>
-              <PermissionProvider>
-                <FeatureFlagsBridge>
-                  <AnalyticsProvider app="admin-portal">
-                    <ErrorBoundary>
-                      {children}
-                    </ErrorBoundary>
-                  </AnalyticsProvider>
-                </FeatureFlagsBridge>
-              </PermissionProvider>
-            </TenantBrandingBridge>
-          </ObservabilityBridge>
-        </ObservabilityProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <AuthProvider baseUrl={API_BASE_URL} onUnauthenticated={() => router.replace('/login')}>
+      <ObservabilityProvider appName="admin-portal" backendUrl={`${API_BASE_URL}/v1/observability/telemetry`}>
+        <ObservabilityBridge>
+          <TenantBrandingBridge>
+            <PermissionProvider>
+              <FeatureFlagsBridge>
+                <AnalyticsProvider app="admin-portal">
+                  <ErrorBoundary>
+                    {children}
+                  </ErrorBoundary>
+                </AnalyticsProvider>
+              </FeatureFlagsBridge>
+            </PermissionProvider>
+          </TenantBrandingBridge>
+        </ObservabilityBridge>
+      </ObservabilityProvider>
+    </AuthProvider>
   );
 }

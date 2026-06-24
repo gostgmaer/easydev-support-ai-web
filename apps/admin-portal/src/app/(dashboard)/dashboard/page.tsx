@@ -21,13 +21,14 @@ import {
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
-  const { data: metrics, isLoading: isMetricsLoading } = useAnalyticsDashboard('Last 30 Days');
+  const { data: metrics, isLoading: isMetricsLoading, isError: isMetricsError } = useAnalyticsDashboard('Last 30 Days');
   const { data: aiMetrics } = useAnalyticsAiMetrics('Last 30 Days');
   const { data: activeAgentsCount } = useActiveAgentsCount();
-  const { data: incidents = [], isLoading: isIncidentsLoading } = useIncidentsAlerts();
-  const { data: queues = [], isLoading: isQueuesLoading } = useQueueStats();
-  const { data: healthChecks = [], isLoading: isHealthChecksLoading } = useSystemHealthChecks();
+  const { data: incidents = [], isLoading: isIncidentsLoading, isError: isIncidentsError } = useIncidentsAlerts();
+  const { data: queues = [], isLoading: isQueuesLoading, isError: isQueuesError } = useQueueStats();
+  const { data: healthChecks = [], isLoading: isHealthChecksLoading, isError: isHealthChecksError } = useSystemHealthChecks();
   const isHealthLoading = isQueuesLoading || isHealthChecksLoading;
+  const isHealthError = isQueuesError || isHealthChecksError;
 
   const getMetricCard = (title: string, value: string | number, desc: string, icon: React.ComponentType<{ className?: string }>, color: string) => {
     const Icon = icon;
@@ -63,6 +64,10 @@ export default function AdminDashboardPage() {
       {isMetricsLoading ? (
         <div className="text-center text-xs text-neutral-400 py-12 animate-pulse font-semibold">
           Loading platform metrics...
+        </div>
+      ) : isMetricsError ? (
+        <div className="text-center text-xs text-danger py-12 font-semibold">
+          Couldn&apos;t load platform metrics. Please try again later.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -110,6 +115,10 @@ export default function AdminDashboardPage() {
             <div className="py-6 text-center text-xs text-neutral-400 animate-pulse font-semibold">
               Loading active incident log...
             </div>
+          ) : isIncidentsError ? (
+            <p className="text-xs text-danger font-semibold py-6 text-center">
+              Couldn&apos;t load the incident log - status unknown, not necessarily clear.
+            </p>
           ) : incidents.length > 0 ? (
             <div className="divide-y divide-neutral-100">
               {incidents.map((incident) => (
@@ -141,6 +150,10 @@ export default function AdminDashboardPage() {
           <div className="space-y-3.5 text-xs text-neutral-600">
             {isHealthLoading ? (
               <p className="text-neutral-400 italic py-2">Loading health checks...</p>
+            ) : isHealthError ? (
+              <p className="text-danger font-semibold py-2">
+                Couldn&apos;t load health checks - status unknown, not necessarily healthy.
+              </p>
             ) : (
               <>
                 {(() => {

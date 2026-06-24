@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { CheckCircle2, ExternalLink, Plus, X, XCircle } from 'lucide-react';
 import { Button, ConversationHeader, Tabs, TabsList, TabsTrigger, TabsContent } from '@easydev/ui';
 import { FeatureFlagGate } from '@easydev/feature-flags';
+import { Can } from '@easydev/permissions';
 import { useInboxStore } from '../store/inboxStore';
 import {
   useAddConversationTag,
@@ -49,28 +50,30 @@ function ConversationActions({
   if (status === 'resolved') return null;
 
   return (
-    <div className="flex items-center gap-1.5">
-      <Button
-        type="button"
-        variant="outline"
-        size="xs"
-        leadingIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
-        isLoading={resolveConversation.isPending}
-        onClick={() => resolveConversation.mutate({ conversationId })}
-      >
-        Resolve
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        leadingIcon={<XCircle className="h-3.5 w-3.5" />}
-        isLoading={closeConversation.isPending}
-        onClick={() => closeConversation.mutate({ conversationId })}
-      >
-        Close
-      </Button>
-    </div>
+    <Can resource="conversation" action="resolve">
+      <div className="flex items-center gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          leadingIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
+          isLoading={resolveConversation.isPending}
+          onClick={() => resolveConversation.mutate({ conversationId })}
+        >
+          Resolve
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          leadingIcon={<XCircle className="h-3.5 w-3.5" />}
+          isLoading={closeConversation.isPending}
+          onClick={() => closeConversation.mutate({ conversationId })}
+        >
+          Close
+        </Button>
+      </div>
+    </Can>
   );
 }
 

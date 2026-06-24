@@ -53,14 +53,22 @@ export function toWidgetMessage(raw: RawMessage): WidgetMessage {
 }
 
 // 0. TENANT BRANDING
-// Public endpoint (no session token needed, only x-tenant-id) - loads before
-// the session bootstrap so the widget shows the tenant's real colors/name
-// immediately instead of generic placeholder defaults the whole time.
+// Both public endpoints (no session token needed, only x-tenant-id) - loads
+// before the session bootstrap so the widget shows the tenant's real
+// colors/name/logo immediately instead of generic placeholder defaults the
+// whole time. WidgetConfig (widget-specific: AI persona name/avatar/welcome
+// message) and the tenant's overall brand logo are two separate backend
+// concepts/endpoints - fetched together here so the widget header has one
+// loading state instead of two.
 interface WidgetConfigResponse {
   widgetName: string;
   primaryColor: string;
   welcomeMessage?: string;
   avatarUrl?: string;
+}
+
+interface PublicBrandingResponse {
+  logoUrl?: string;
 }
 
 export function useWidgetBranding() {
@@ -71,16 +79,20 @@ export function useWidgetBranding() {
   return useQuery({
     queryKey: ['widget', 'branding', tenantId],
     queryFn: async () => {
-      const data = await apiClient.get<WidgetConfigResponse>('/v1/widget/config');
+      const [data, branding] = await Promise.all([
+        apiClient.get<WidgetConfigResponse>('/v1/widget/config'),
+        apiClient.get<PublicBrandingResponse>('/v1/public/branding'),
+      ]);
       // Only patch fields the tenant actually configured - an absent
-      // welcomeMessage/avatarUrl should keep the local fallback, not get
-      // overwritten with undefined.
+      // welcomeMessage/avatarUrl/logoUrl should keep the local fallback, not
+      // get overwritten with undefined.
       const patch: Partial<WidgetConfig> = {
         primaryColor: data.primaryColor,
         aiName: data.widgetName,
       };
       if (data.welcomeMessage) patch.welcomeMessage = data.welcomeMessage;
       if (data.avatarUrl) patch.agentAvatar = data.avatarUrl;
+      if (branding.logoUrl) patch.tenantLogo = branding.logoUrl;
       setConfig(patch);
       return data;
     },

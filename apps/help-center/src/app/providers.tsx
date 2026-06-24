@@ -2,12 +2,14 @@
 
 import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@easydev/auth';
 import { PermissionProvider } from '@easydev/permissions';
 import { FeatureFlagProvider } from '@easydev/feature-flags';
 import { AnalyticsProvider } from '@easydev/analytics';
-import { ThemeProvider, TenantBrandingProvider } from '@easydev/design-system';
-import { ApiProvider } from '@easydev/api-client';
+import { TenantBrandingProvider } from '@easydev/design-system';
+import type { TenantBranding } from '@easydev/design-system';
+import { ApiProvider, useApiClient } from '@easydev/api-client';
 import { ObservabilityProvider, useTelemetry, ErrorBoundary } from '@easydev/observability';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333';
@@ -40,11 +42,26 @@ function TenantIdSync({
   return null;
 }
 
-/** Applies the active tenant's brand colors once a session is resolved; falls back to the
- * default palette for anonymous visitors (the common case for public Help Center pages). */
-function TenantBrandingBridge({ children }: { children: React.ReactNode }) {
-  const { tenant } = useAuth();
-  return <TenantBrandingProvider branding={tenant?.branding ?? null}>{children}</TenantBrandingProvider>;
+/** Applies the resolved tenant's brand colors/logo via the same public,
+ * unauthenticated tenant-resolution path page content already uses
+ * (apiClient's x-tenant-id header, from TenantIdSync's ?tenantId= ref) -
+ * NOT from useAuth()'s session-gated tenant, which is null for the anonymous
+ * visitors that make up the common case for public Help Center pages. */
+function TenantBrandingBridge({
+  children,
+  tenantResolved,
+}: {
+  children: React.ReactNode;
+  tenantResolved: boolean;
+}) {
+  const apiClient = useApiClient();
+  const { data: branding } = useQuery<TenantBranding>({
+    queryKey: ['public-branding'],
+    queryFn: () => apiClient.get<TenantBranding>('/v1/public/branding'),
+    enabled: tenantResolved,
+    staleTime: 5 * 60 * 1000,
+  });
+  return <TenantBrandingProvider branding={branding ?? null}>{children}</TenantBrandingProvider>;
 }
 
 /** Synchronizes the authenticated user and tenant states with the telemetry client context. */
@@ -84,33 +101,31 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ThemeProvider>
-      <ApiProvider config={apiConfig}>
-        <React.Suspense fallback={null}>
-          <TenantIdSync
-            tenantIdRef={tenantIdRef}
-            onTenantId={setTenantId}
-            onResolved={() => setTenantResolved(true)}
-          />
-        </React.Suspense>
-        <AuthProvider baseUrl={API_BASE_URL}>
-          <ObservabilityProvider appName="help-center" backendUrl={`${API_BASE_URL}/v1/observability/telemetry`}>
-            <ObservabilityBridge>
-              <TenantBrandingBridge>
-                <PermissionProvider>
-                  <FeatureFlagsBridge tenantResolved={tenantResolved}>
-                    <AnalyticsProvider app="help-center">
-                      <ErrorBoundary client={null as any /* Will resolve from context dynamically or fallback inside ErrorBoundary */}>
-                        {children}
-                      </ErrorBoundary>
-                    </AnalyticsProvider>
-                  </FeatureFlagsBridge>
-                </PermissionProvider>
-              </TenantBrandingBridge>
-            </ObservabilityBridge>
-          </ObservabilityProvider>
-        </AuthProvider>
-      </ApiProvider>
-    </ThemeProvider>
+    <ApiProvider config={apiConfig}>
+      <React.Suspense fallback={null}>
+        <TenantIdSync
+          tenantIdRef={tenantIdRef}
+          onTenantId={setTenantId}
+          onResolved={() => setTenantResolved(true)}
+        />
+      </React.Suspense>
+      <AuthProvider baseUrl={API_BASE_URL}>
+        <ObservabilityProvider appName="help-center" backendUrl={`${API_BASE_URL}/v1/observability/telemetry`}>
+          <ObservabilityBridge>
+            <TenantBrandingBridge tenantResolved={tenantResolved}>
+              <PermissionProvider>
+                <FeatureFlagsBridge tenantResolved={tenantResolved}>
+                  <AnalyticsProvider app="help-center">
+                    <ErrorBoundary client={null as any /* Will resolve from context dynamically or fallback inside ErrorBoundary */}>
+                      {children}
+                    </ErrorBoundary>
+                  </AnalyticsProvider>
+                </FeatureFlagsBridge>
+              </PermissionProvider>
+            </TenantBrandingBridge>
+          </ObservabilityBridge>
+        </ObservabilityProvider>
+      </AuthProvider>
+    </ApiProvider>
   );
 }

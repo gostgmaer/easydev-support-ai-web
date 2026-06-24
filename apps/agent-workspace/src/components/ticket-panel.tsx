@@ -144,14 +144,20 @@ export function TicketPanel() {
               <div key={app.id} className="flex items-center justify-between rounded border border-neutral-200 bg-neutral-50 p-2.5 text-xs">
                 <span className="font-bold text-neutral-800">Approver: {app.approverId}</span>
                 {app.status === 'pending' ? (
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => handleApprovalUpdate(app.id, 'approved')} className="rounded p-1 text-success hover:bg-success/15" aria-label="Approve request">
-                      <CheckCircle2 className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => handleApprovalUpdate(app.id, 'rejected')} className="rounded p-1 text-danger hover:bg-danger/15" aria-label="Reject request">
-                      <XCircle className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <Can
+                    resource="ticket"
+                    action="resolve"
+                    fallback={<span className="text-[10px] font-bold uppercase text-neutral-400">Pending</span>}
+                  >
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleApprovalUpdate(app.id, 'approved')} className="rounded p-1 text-success hover:bg-success/15" aria-label="Approve request">
+                        <CheckCircle2 className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleApprovalUpdate(app.id, 'rejected')} className="rounded p-1 text-danger hover:bg-danger/15" aria-label="Reject request">
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </Can>
                 ) : (
                   <span className={`rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${app.status === 'approved' ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'}`}>
                     {app.status}

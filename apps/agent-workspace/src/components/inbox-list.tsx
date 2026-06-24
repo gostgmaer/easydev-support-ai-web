@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { AlarmClock, Bookmark, Bot, Clock, Sparkles } from 'lucide-react';
 import { useAuth } from '@easydev/auth';
 import { useHasPermission } from '@easydev/permissions';
-import { ConversationCard, BulkActions, NoConversationsEmptyState, InboxLoading, type BulkAction } from '@easydev/ui';
+import { ConversationCard, BulkActions, NoConversationsEmptyState, InboxLoading, ApiErrorState, type BulkAction } from '@easydev/ui';
 import { useInboxStore } from '../store/inboxStore';
 import { useAssignConversation, useBookmarkedConversationIds, useToggleBookmark, useToggleSnooze } from '../hooks/useQueries';
 import { toConversationSummary } from '../lib/ui-adapters';
@@ -11,6 +11,8 @@ import { Conversation } from '../types';
 
 export interface InboxListProps {
   isLoading?: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
   hasMore?: boolean;
   isFetchingMore?: boolean;
   onLoadMore?: () => void;
@@ -106,7 +108,7 @@ const ConversationRow = React.memo(function ConversationRow({
   );
 });
 
-export function InboxList({ isLoading, hasMore, isFetchingMore, onLoadMore }: InboxListProps) {
+export function InboxList({ isLoading, isError, onRetry, hasMore, isFetchingMore, onLoadMore }: InboxListProps) {
   const { user } = useAuth();
   const conversations = useInboxStore((state) => state.conversations);
   const selectedView = useInboxStore((state) => state.selectedView);
@@ -198,6 +200,12 @@ export function InboxList({ isLoading, hasMore, isFetchingMore, onLoadMore }: In
       {/* Conversation List Scroll Area */}
       {isLoading ? (
         <InboxLoading />
+      ) : isError ? (
+        <ApiErrorState
+          title="Couldn't load this inbox"
+          description="The conversation list failed to load. Please try again."
+          onRetry={onRetry}
+        />
       ) : conversations.length === 0 ? (
         <NoConversationsEmptyState />
       ) : (

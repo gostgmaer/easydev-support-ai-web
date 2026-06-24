@@ -24,8 +24,8 @@ export default function PublicHomePage() {
   const [aiQuery, setAiQuery] = React.useState('');
   const [feedbackGiven, setFeedbackGiven] = React.useState(false);
 
-  const { data: categories = [], isLoading: loadingCategories } = useCategories();
-  const { data: recentArticles = [], isLoading: loadingArticles } = useRecentArticles(3);
+  const { data: categories = [], isLoading: loadingCategories, isError: categoriesFailed } = useCategories();
+  const { data: recentArticles = [], isLoading: loadingArticles, isError: articlesFailed } = useRecentArticles(3);
 
   const chatHistory = useAIHelpStore((state) => state.chatHistory);
   const isAskingAI = useAIHelpStore((state) => state.isAskingAI);
@@ -106,6 +106,8 @@ export default function PublicHomePage() {
 
         {loadingCategories ? (
           <div className="flex justify-center py-8"><Spinner className="h-5 w-5 text-neutral-400" /></div>
+        ) : categoriesFailed ? (
+          <p className="text-center text-danger-600 text-xs py-8">Couldn&apos;t load categories. Please try again later.</p>
         ) : categories.length === 0 ? (
           <p className="text-center text-neutral-400 text-xs py-8">No categories published yet.</p>
         ) : (
@@ -143,6 +145,8 @@ export default function PublicHomePage() {
           </h2>
           {loadingArticles ? (
             <div className="flex justify-center py-8"><Spinner className="h-5 w-5 text-neutral-400" /></div>
+          ) : articlesFailed ? (
+            <p className="text-danger-600 text-xs py-8 text-center">Couldn&apos;t load recent articles. Please try again later.</p>
           ) : recentArticles.length === 0 ? (
             <p className="text-neutral-400 text-xs py-8 text-center">No published articles yet.</p>
           ) : (

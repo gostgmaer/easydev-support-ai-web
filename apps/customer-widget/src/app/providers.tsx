@@ -81,7 +81,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <DesignSystemProvider defaultTheme="light">
+    <DesignSystemProvider>
       <ApiProvider config={apiConfig}>
         <ObservabilityProvider appName="customer-widget" backendUrl={`${API_BASE_URL}/v1/observability/telemetry`}>
           <React.Suspense fallback={null}>

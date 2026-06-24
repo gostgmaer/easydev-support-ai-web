@@ -26,13 +26,15 @@ export default function InboxViewPage({ params }: { params: Promise<{ view: stri
     setSelectedView(view);
   }, [view, setSelectedView]);
 
-  const { isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useConversations(view, filters, teamId);
+  const { isLoading, isError, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } = useConversations(view, filters, teamId);
 
   return (
     <ResizablePanelGroup direction="horizontal" className="h-full">
       <ResizablePanel defaultSize={32} minSize={22} maxSize={45}>
         <InboxList
           isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetch()}
           hasMore={hasNextPage}
           isFetchingMore={isFetchingNextPage}
           onLoadMore={() => fetchNextPage()}

@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Key, Plus, Trash2, Copy, AlertTriangle, RefreshCw } from 'lucide-react';
+import { useHasPermission } from '@easydev/permissions';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useRotateApiKey } from '../../../hooks/useAdminQueries';
 
 export default function ApiKeysPage() {
@@ -9,6 +10,11 @@ export default function ApiKeysPage() {
   const createKeyMutation = useCreateApiKey();
   const revokeKeyMutation = useRevokeApiKey();
   const rotateKeyMutation = useRotateApiKey();
+  // Backend RBAC is the real enforcement - these only avoid dead-end clicks
+  // for users who can see this page but lack the specific api_key action.
+  const canCreate = useHasPermission('api_key', 'create');
+  const canUpdate = useHasPermission('api_key', 'update');
+  const canDelete = useHasPermission('api_key', 'delete');
 
   const [showCreateForm, setShowCreateForm] = React.useState(false);
   const [name, setName] = React.useState('');
@@ -64,13 +70,15 @@ export default function ApiKeysPage() {
           <h1 className="text-base font-bold text-neutral-900">API Access Keys</h1>
           <p className="text-xs text-neutral-500">Generate, track, and revoke access keys used by external webhook scripts and CRM connectors.</p>
         </div>
-        <button
-          onClick={() => setShowCreateForm((v) => !v)}
-          className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-900 text-white font-bold text-xs px-3.5 py-2 rounded-md transition"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Generate API Key</span>
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setShowCreateForm((v) => !v)}
+            className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-900 text-white font-bold text-xs px-3.5 py-2 rounded-md transition"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Generate API Key</span>
+          </button>
+        )}
       </div>
 
       {revealedKey && (
@@ -176,23 +184,27 @@ export default function ApiKeysPage() {
                       </td>
                       <td className="p-3">{new Date(k.createdAt).toLocaleDateString()}</td>
                       <td className="p-3 text-right">
-                        {k.status === 'ACTIVE' && (
+                        {k.status === 'ACTIVE' && (canUpdate || canDelete) && (
                           <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => handleRotateKey(k.id, k.name)}
-                              disabled={rotateKeyMutation.isPending}
-                              className="text-neutral-400 hover:text-primary-600 p-1"
-                              aria-label={`Rotate API Key ${k.name}`}
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleRevokeKey(k.id, k.name)}
-                              className="text-neutral-400 hover:text-danger p-1"
-                              aria-label={`Revoke API Key ${k.name}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            {canUpdate && (
+                              <button
+                                onClick={() => handleRotateKey(k.id, k.name)}
+                                disabled={rotateKeyMutation.isPending}
+                                className="text-neutral-400 hover:text-primary-600 p-1"
+                                aria-label={`Rotate API Key ${k.name}`}
+                              >
+                                <RefreshCw className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => handleRevokeKey(k.id, k.name)}
+                                className="text-neutral-400 hover:text-danger p-1"
+                                aria-label={`Revoke API Key ${k.name}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>

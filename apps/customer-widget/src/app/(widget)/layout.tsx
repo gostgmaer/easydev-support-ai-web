@@ -76,7 +76,13 @@ export default function WidgetWindowLayout({ children }: { children: React.React
             className="border-2 border-white/80"
           />
           <div>
-            <h2 className="text-xs font-bold leading-none">{config.aiName}</h2>
+            <div className="flex items-center gap-1.5">
+              {config.tenantLogo && (
+                // eslint-disable-next-line @next/next/no-img-element -- tenant-supplied URL, not a static asset Next's image optimizer can use
+                <img src={config.tenantLogo} alt="" className="h-3.5 w-3.5 rounded-sm object-contain bg-white/10" />
+              )}
+              <h2 className="text-xs font-bold leading-none">{config.aiName}</h2>
+            </div>
             <span className="text-[10px] text-white/80 mt-1 block">Typically replies instantly</span>
           </div>
         </div>
