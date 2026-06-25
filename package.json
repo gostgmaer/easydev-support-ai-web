@@ -10,9 +10,9 @@
     "dev:agent-workspace": "pnpm --filter agent-workspace dev",
     "dev:customer-widget": "pnpm --filter @easydev/customer-widget dev",
     "dev:help-center": "pnpm --filter @easydev/help-center dev",
-    "frontend:up": "bash scripts/frontend-up.sh",
-    "frontend:up:package": "bash scripts/frontend-up.sh --with-packages",
-    "frontend:down": "bash scripts/frontend-down.sh",
+    "frontend:up": "node scripts/run-with-git-bash.js scripts/frontend-up.sh",
+    "frontend:up:package": "node scripts/run-with-git-bash.js scripts/frontend-up.sh --with-packages",
+    "frontend:down": "node scripts/run-with-git-bash.js scripts/frontend-down.sh",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down"
   },
