@@ -1,0 +1,56 @@
+version: '3.8'
+name: easydev-support-ai-web
+
+# Production-style build of all 4 apps via the shared root Dockerfile.
+# Talks to the backend on the host (host.docker.internal:3100) by default -
+# point NEXT_PUBLIC_API_BASE_URL/NEXT_PUBLIC_SOCKET_URL at a real deployed
+# backend URL for staging/prod. Rebuild (not just `up`) after changing any
+# NEXT_PUBLIC_* build arg - see Dockerfile's comment on why.
+services:
+  admin-portal:
+    build:
+      context: .
+      args:
+        APP_DIR: admin-portal
+        APP_PORT: 3011
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://host.docker.internal:3100}
+    image: easydev-support-ai-web-admin-portal:local
+    ports:
+      - '3011:3011'
+
+  agent-workspace:
+    build:
+      context: .
+      args:
+        APP_DIR: agent-workspace
+        APP_PORT: 3012
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://host.docker.internal:3100}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-http://host.docker.internal:3100}
+    image: easydev-support-ai-web-agent-workspace:local
+    ports:
+      - '3012:3012'
+
+  customer-widget:
+    build:
+      context: .
+      args:
+        APP_DIR: customer-widget
+        APP_PORT: 3013
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://host.docker.internal:3100}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-http://host.docker.internal:3100}
+    image: easydev-support-ai-web-customer-widget:local
+    ports:
+      - '3013:3013'
+
+  help-center:
+    build:
+      context: .
+      args:
+        APP_DIR: help-center
+        APP_PORT: 3014
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://host.docker.internal:3100}
+        NEXT_PUBLIC_WIDGET_EMBED_URL: ${NEXT_PUBLIC_WIDGET_EMBED_URL:-http://host.docker.internal:3013/embed.js}
+        NEXT_PUBLIC_WIDGET_TENANT_ID: ${NEXT_PUBLIC_WIDGET_TENANT_ID:-}
+    image: easydev-support-ai-web-help-center:local
+    ports:
+      - '3014:3014'

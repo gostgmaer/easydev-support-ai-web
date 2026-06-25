@@ -32,6 +32,7 @@ const socketWsOrigin = socketOrigin.replace(/^http/, "ws");
 // ].join("; ");
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   reactStrictMode: true,
   transpilePackages: [
     "@easydev/ui",

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Stops all 4 frontend dev servers started by frontend-up.sh.
+# Stops the packages watch build and all 4 frontend dev servers started by
+# frontend-up.sh.
 cd "$(dirname "$0")/.."
 
 stop() {
@@ -23,6 +24,7 @@ stop() {
   rm -f "$pidfile"
 }
 
+stop packages-watch
 stop admin-portal
 stop agent-workspace
 stop customer-widget
