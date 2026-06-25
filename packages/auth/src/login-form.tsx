@@ -6,15 +6,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { focusRingClassName } from '@easydev/design-system';
-import { safeLocalStorage } from '@easydev/utils';
 import { useAuth } from './auth-provider';
-
-const LAST_TENANT_SLUG_KEY = 'easydev.auth.lastTenantSlug';
 
 const loginSchema = z.object({
   email: z.string().email('Enter a valid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  tenantSlug: z.string().optional(),
 });
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
@@ -28,8 +24,9 @@ export interface LoginFormProps {
 
 /**
  * Shared login form used by every app shell - no app implements its own login logic.
- * The tenant slug is non-sensitive convenience state only (pre-fill on return visits);
- * it is never treated as a security boundary, the IAM session response is.
+ * Email + password only: except for super-admins, each user belongs to exactly one
+ * tenant, which IAM resolves server-side from the credentials - there is nothing
+ * for a regular user to disambiguate at login.
  */
 export function LoginForm({ title, subtitle, forgotPasswordHref = '/forgot-password', onSuccess }: LoginFormProps) {
   const { login } = useAuth();
@@ -41,14 +38,12 @@ export function LoginForm({ title, subtitle, forgotPasswordHref = '/forgot-passw
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { tenantSlug: safeLocalStorage.get(LAST_TENANT_SLUG_KEY) ?? '' },
   });
 
   const onSubmit = async (values: LoginFormValues) => {
     setServerError(null);
     try {
       await login(values);
-      if (values.tenantSlug) safeLocalStorage.set(LAST_TENANT_SLUG_KEY, values.tenantSlug);
       onSuccess();
     } catch (error) {
       setServerError(error instanceof Error ? error.message : 'Login failed');
@@ -105,20 +100,6 @@ export function LoginForm({ title, subtitle, forgotPasswordHref = '/forgot-passw
               {errors.password.message}
             </p>
           )}
-        </div>
-
-        <div className="space-y-1">
-          <label htmlFor="tenantSlug" className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-            Organization (optional)
-          </label>
-          <input
-            id="tenantSlug"
-            type="text"
-            autoComplete="organization"
-            placeholder="acme"
-            className={`w-full rounded-md border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-900 ${focusRingClassName}`}
-            {...register('tenantSlug')}
-          />
         </div>
 
         {serverError && (
