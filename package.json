@@ -9,7 +9,9 @@
     "dev:admin-portal": "pnpm --filter @easydev/admin-portal dev",
     "dev:agent-workspace": "pnpm --filter agent-workspace dev",
     "dev:customer-widget": "pnpm --filter @easydev/customer-widget dev",
-    "dev:help-center": "pnpm --filter @easydev/help-center dev"
+    "dev:help-center": "pnpm --filter @easydev/help-center dev",
+    "frontend:up": "bash scripts/frontend-up.sh",
+    "frontend:down": "bash scripts/frontend-down.sh"
   },
   "devDependencies": {
     "typescript": "^5.7.2"
