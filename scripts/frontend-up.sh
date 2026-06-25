@@ -17,15 +17,27 @@ mkdir -p logs .pids
 
 start() {
   local name="$1"
-  shift
+  local cwd="$2"
+  shift 2
   if [ -f ".pids/$name.pid" ] && kill -0 "$(cat ".pids/$name.pid")" 2>/dev/null; then
     echo "$name already running"
     return
   fi
-  "$@" > "logs/$name.log" 2>&1 &
-  echo $! > ".pids/$name.pid"
+  : > "logs/$name.log"
+  # Plain `"$@" & ` background jobs die when this bash process (and the
+  # npm/PowerShell chain above it) exits on Windows - see spawn-detached.js
+  # for why. Node's own detached+unref spawn survives that.
+  node scripts/spawn-detached.js "$name" "$cwd" "$@"
   echo "$name starting (log: logs/$name.log)"
 }
+
+# Path to an app's own next bin, *relative to that app's own directory*
+# (which is what `start`'s cwd will be) - so it can be run directly via
+# `node`, skipping pnpm/cmd.exe entirely. cmd.exe was observed not
+# surviving detachment on Windows, and even when it appeared to, pnpm
+# exited early while next dev kept running as an orphan under an
+# untracked PID, which broke frontend-down.sh's ability to stop it later.
+NEXT_BIN="node_modules/next/dist/bin/next"
 
 if [ "$with_packages" = true ]; then
   # One-shot build first, in dependency order (plain pnpm recursive, no
@@ -41,7 +53,7 @@ if [ "$with_packages" = true ]; then
   # then hot-reloads - this is what makes shared-package changes show up live
   # without a manual rebuild. charts/forms/icons/layouts have no build step
   # (same exclusion as build:packages) so they're left out here too.
-  start packages-watch pnpm --filter "./packages/**" \
+  start packages-watch . pnpm --filter "./packages/**" \
     --filter "!./packages/charts" \
     --filter "!./packages/forms" \
     --filter "!./packages/icons" \
@@ -51,10 +63,10 @@ else
   echo "Skipping shared-packages build (run 'npm run frontend:up:package' to include it)."
 fi
 
-start admin-portal pnpm --filter "@easydev/admin-portal" dev
-start agent-workspace pnpm --filter "agent-workspace" dev
-start customer-widget pnpm --filter "@easydev/customer-widget" dev
-start help-center pnpm --filter "@easydev/help-center" dev
+start admin-portal apps/admin-portal node "$NEXT_BIN" dev -p 3011
+start agent-workspace apps/agent-workspace node "$NEXT_BIN" dev -p 3012
+start customer-widget apps/customer-widget node "$NEXT_BIN" dev -p 3013
+start help-center apps/help-center node "$NEXT_BIN" dev -p 3014
 
 echo
 if [ "$with_packages" = true ]; then
