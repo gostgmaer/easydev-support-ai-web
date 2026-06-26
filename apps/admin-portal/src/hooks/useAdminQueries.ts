@@ -1089,3 +1089,1356 @@ export function useDeleteWebhook() {
     },
   });
 }
+
+// ─── IAM PROFILE & SESSIONS ──────────────────────────────────────────────────
+
+export interface IamUserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
+  timezone?: string;
+  locale?: string;
+}
+
+export interface IamSession {
+  id: string;
+  userAgent: string;
+  ipAddress: string;
+  createdAt: string;
+  lastActiveAt: string;
+  isCurrent: boolean;
+}
+
+export function useIamProfile() {
+  const apiClient = useApiClient();
+  return useQuery<IamUserProfile>({
+    queryKey: ['iam', 'me', 'profile'],
+    queryFn: () => apiClient.get<IamUserProfile>('/v1/iam/me/profile'),
+  });
+}
+
+export function useUpdateIamProfile() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: Partial<IamUserProfile>) => apiClient.patch<IamUserProfile>('/v1/iam/me/profile', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['iam', 'me', 'profile'] }),
+  });
+}
+
+export function useChangePassword() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: (dto: { currentPassword: string; newPassword: string }) =>
+      apiClient.post<{ success: boolean }>('/v1/iam/me/password/change', dto),
+  });
+}
+
+export function useIamSessions() {
+  const apiClient = useApiClient();
+  return useQuery<IamSession[]>({
+    queryKey: ['iam', 'me', 'sessions'],
+    queryFn: () => apiClient.get<IamSession[]>('/v1/iam/me/sessions'),
+  });
+}
+
+export function useRevokeIamSession() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) => apiClient.delete<void>(`/v1/iam/me/sessions/${sessionId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['iam', 'me', 'sessions'] }),
+  });
+}
+
+// ─── AI AGENTS ───────────────────────────────────────────────────────────────
+
+export interface AiAgent {
+  id: string;
+  name: string;
+  slug: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'TRAINING';
+  escalationThreshold: number;
+  confidenceThreshold: number;
+  modelConfig?: { provider: string; model: string; maxTokens: number; temperature: number };
+  profile?: { persona: string; tone: string; instructions: string };
+  createdAt: string;
+}
+
+export function useAiAgents() {
+  const apiClient = useApiClient();
+  return useQuery<AiAgent[]>({
+    queryKey: ['admin', 'ai-agents'],
+    queryFn: () => apiClient.get<AiAgent[]>('/v1/ai-agents'),
+  });
+}
+
+export function useAiAgentById(id: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<AiAgent>({
+    queryKey: ['admin', 'ai-agents', id],
+    queryFn: () => apiClient.get<AiAgent>(`/v1/ai-agents/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateAiAgent() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; slug: string; confidenceThreshold?: number; escalationThreshold?: number }) =>
+      apiClient.post<AiAgent>('/v1/ai-agents', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'ai-agents'] }),
+  });
+}
+
+export function useUpdateAiAgent() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: Partial<AiAgent> & { id: string }) =>
+      apiClient.put<AiAgent>(`/v1/ai-agents/${id}`, dto),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'ai-agents'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'ai-agents', id] });
+    },
+  });
+}
+
+export function useUpdateAiAgentProfile() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: { id: string; persona: string; tone: string; instructions: string }) =>
+      apiClient.put<AiAgent>(`/v1/ai-agents/${id}/profile`, dto),
+    onSuccess: (_, { id }) => queryClient.invalidateQueries({ queryKey: ['admin', 'ai-agents', id] }),
+  });
+}
+
+export function useUpdateAiAgentModelConfig() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...dto
+    }: {
+      id: string;
+      provider: string;
+      model: string;
+      maxTokens: number;
+      temperature: number;
+    }) => apiClient.put<AiAgent>(`/v1/ai-agents/${id}/model-config`, dto),
+    onSuccess: (_, { id }) => queryClient.invalidateQueries({ queryKey: ['admin', 'ai-agents', id] }),
+  });
+}
+
+export function useDeleteAiAgent() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/ai-agents/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'ai-agents'] }),
+  });
+}
+
+export interface AiUsageRecord {
+  agentId: string;
+  date: string;
+  requestCount: number;
+  tokensUsed: number;
+  estimatedCost: number;
+}
+
+export function useAiUsage(params?: { agentId?: string; startDate?: string; endDate?: string }) {
+  const apiClient = useApiClient();
+  return useQuery<AiUsageRecord[]>({
+    queryKey: ['admin', 'ai-usage', params],
+    queryFn: () => apiClient.get<AiUsageRecord[]>('/v1/ai-usage', { query: params as Record<string, string> }),
+  });
+}
+
+// ─── ANALYTICS — EXTENDED ────────────────────────────────────────────────────
+
+export interface AgentMetrics {
+  agentId: string;
+  displayName: string;
+  conversationsHandled: number;
+  avgResponseTime: number;
+  avgResolutionTime: number;
+  csatScore: number;
+  ticketsResolved: number;
+}
+
+export function useAnalyticsAgentMetrics(timeRange: string) {
+  const apiClient = useApiClient();
+  return useQuery<AgentMetrics[]>({
+    queryKey: ['admin', 'analytics', 'agents', timeRange],
+    queryFn: () => apiClient.get<AgentMetrics[]>('/v1/analytics/dashboard/agents', { query: { timeRange } }),
+  });
+}
+
+export function useAnalyticsAgentDetail(agentId: string | undefined, timeRange: string) {
+  const apiClient = useApiClient();
+  return useQuery<AgentMetrics>({
+    queryKey: ['admin', 'analytics', 'agents', agentId, timeRange],
+    queryFn: () =>
+      apiClient.get<AgentMetrics>(`/v1/analytics/dashboard/agents/${agentId}`, { query: { timeRange } }),
+    enabled: !!agentId,
+  });
+}
+
+export interface RealtimeLiveCounters {
+  openConversations: number;
+  activeAgents: number;
+  waitingConversations: number;
+  aiHandledToday: number;
+  slaBreachesToday: number;
+}
+
+export function useRealtimeLiveCounters() {
+  const apiClient = useApiClient();
+  return useQuery<RealtimeLiveCounters>({
+    queryKey: ['admin', 'analytics', 'realtime', 'live-counters'],
+    queryFn: () => apiClient.get<RealtimeLiveCounters>('/v1/analytics/realtime/live-counters'),
+    refetchInterval: 30000,
+  });
+}
+
+export interface RealtimeLiveSla {
+  slaBreachCount: number;
+  atRiskCount: number;
+  onTrackCount: number;
+  breachRatePercent: number;
+}
+
+export function useRealtimeLiveSla() {
+  const apiClient = useApiClient();
+  return useQuery<RealtimeLiveSla>({
+    queryKey: ['admin', 'analytics', 'realtime', 'live-sla'],
+    queryFn: () => apiClient.get<RealtimeLiveSla>('/v1/analytics/realtime/live-sla'),
+    refetchInterval: 30000,
+  });
+}
+
+export interface RealtimeLiveAi {
+  activeAiSessions: number;
+  pendingEscalations: number;
+  aiResolutionRateLast1h: number;
+  avgConfidenceScore: number;
+}
+
+export function useRealtimeLiveAi() {
+  const apiClient = useApiClient();
+  return useQuery<RealtimeLiveAi>({
+    queryKey: ['admin', 'analytics', 'realtime', 'live-ai'],
+    queryFn: () => apiClient.get<RealtimeLiveAi>('/v1/analytics/realtime/live-ai'),
+    refetchInterval: 30000,
+  });
+}
+
+export function useAnalyticsReportById(id: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<AnalyticsReport>({
+    queryKey: ['admin', 'analytics', 'reports', id],
+    queryFn: () => apiClient.get<AnalyticsReport>(`/v1/analytics/reports/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateAnalyticsReport() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: { id: string; name?: string; reportType?: string; timeRange?: string }) =>
+      apiClient.put<AnalyticsReport>(`/v1/analytics/reports/${id}`, dto),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'analytics', 'reports'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'analytics', 'reports', id] });
+    },
+  });
+}
+
+export interface ReportSchedule {
+  id: string;
+  reportId: string;
+  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY';
+  recipients: string[];
+  format: 'CSV' | 'PDF';
+  active: boolean;
+  nextRunAt: string;
+}
+
+export function useAnalyticsReportSchedules() {
+  const apiClient = useApiClient();
+  return useQuery<ReportSchedule[]>({
+    queryKey: ['admin', 'analytics', 'report-schedules'],
+    queryFn: () => apiClient.get<ReportSchedule[]>('/v1/analytics/reports/schedules/list'),
+  });
+}
+
+export function useCreateAnalyticsReportSchedule() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: Omit<ReportSchedule, 'id' | 'nextRunAt'>) =>
+      apiClient.post<ReportSchedule>('/v1/analytics/reports/schedules', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'analytics', 'report-schedules'] }),
+  });
+}
+
+export function useDeleteAnalyticsReportSchedule() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/analytics/reports/schedules/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'analytics', 'report-schedules'] }),
+  });
+}
+
+// ─── SYSTEM HEALTH — QUEUE DETAILS ───────────────────────────────────────────
+
+export interface QueueDetail extends QueueStats {
+  workers: { id: string; status: string; jobId?: string }[];
+  failedJobs: { id: string; name: string; failedReason: string; timestamp: number }[];
+}
+
+export function useQueueDetail(queueName: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<QueueStats>({
+    queryKey: ['admin', 'health', 'queues', queueName],
+    queryFn: () => apiClient.get<QueueStats>(`/v1/admin/health/queues/${queueName}`),
+    enabled: !!queueName,
+    refetchInterval: 10000,
+  });
+}
+
+export function useQueueWorkers(queueName: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<{ id: string; status: string; jobId?: string }[]>({
+    queryKey: ['admin', 'health', 'queues', queueName, 'workers'],
+    queryFn: () =>
+      apiClient.get<{ id: string; status: string; jobId?: string }[]>(
+        `/v1/admin/health/queues/${queueName}/workers`,
+      ),
+    enabled: !!queueName,
+    refetchInterval: 10000,
+  });
+}
+
+export function useQueueFailedJobs(queueName: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<{ id: string; name: string; failedReason: string; timestamp: number }[]>({
+    queryKey: ['admin', 'health', 'queues', queueName, 'failed'],
+    queryFn: () =>
+      apiClient.get<{ id: string; name: string; failedReason: string; timestamp: number }[]>(
+        `/v1/admin/health/queues/${queueName}/failed`,
+      ),
+    enabled: !!queueName,
+  });
+}
+
+export function useRetryQueueJob() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ queueName, jobId }: { queueName: string; jobId: string }) =>
+      apiClient.post<{ success: boolean }>(`/v1/admin/health/queues/${queueName}/jobs/${jobId}/retry`),
+    onSuccess: (_, { queueName }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'health', 'queues', queueName, 'failed'] });
+    },
+  });
+}
+
+export interface DeadLetterJob {
+  id: string;
+  queue: string;
+  name: string;
+  failedReason: string;
+  timestamp: number;
+  attemptsMade: number;
+}
+
+export function useDeadLetterQueue() {
+  const apiClient = useApiClient();
+  return useQuery<DeadLetterJob[]>({
+    queryKey: ['admin', 'health', 'dead-letter'],
+    queryFn: () => apiClient.get<DeadLetterJob[]>('/v1/admin/health/dead-letter'),
+  });
+}
+
+export function useReplayDeadLetterJob() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) => apiClient.post<{ success: boolean }>(`/v1/admin/health/dead-letter/${jobId}/replay`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'health', 'dead-letter'] }),
+  });
+}
+
+// ─── INCIDENTS — EXTENDED ────────────────────────────────────────────────────
+
+export function useIncidentById(id: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<IncidentAlert>({
+    queryKey: ['admin', 'incidents', id],
+    queryFn: () => apiClient.get<IncidentAlert>(`/v1/admin/incidents/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateIncident() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: {
+      title: string;
+      description?: string;
+      severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+      affectedService?: string;
+    }) => apiClient.post<IncidentAlert>('/v1/admin/incidents', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'incidents'] }),
+  });
+}
+
+export function useUpdateIncidentStatus() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      status,
+    }: {
+      id: string;
+      status: 'OPEN' | 'INVESTIGATING' | 'IDENTIFIED' | 'MONITORING' | 'RESOLVED';
+    }) => apiClient.patch<IncidentAlert>(`/v1/admin/incidents/${id}/status`, { status }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'incidents'] }),
+  });
+}
+
+// ─── AUDIT LOG — EXTENDED ────────────────────────────────────────────────────
+
+export type AuditLogType =
+  | 'entities'
+  | 'settings'
+  | 'workflows'
+  | 'ai-configuration'
+  | 'api-keys'
+  | 'security';
+
+export function useAuditLogByType(type: AuditLogType, params?: Record<string, string>) {
+  const apiClient = useApiClient();
+  return useQuery<{ data: AuditLogRecord[]; total: number }>({
+    queryKey: ['admin', 'audit', type, params],
+    queryFn: () =>
+      apiClient.get<{ data: AuditLogRecord[]; total: number }>(`/v1/admin/audit/${type}`, {
+        query: { limit: '50', ...params },
+      }),
+  });
+}
+
+export function useConnectorAuditLog(connectorId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<{ data: AuditLogRecord[]; total: number }>({
+    queryKey: ['admin', 'audit', 'connectors', connectorId],
+    queryFn: () =>
+      apiClient.get<{ data: AuditLogRecord[]; total: number }>(
+        `/v1/admin/audit/connectors/${connectorId}`,
+        { query: { limit: '50' } },
+      ),
+    enabled: !!connectorId,
+  });
+}
+
+export interface AuditView {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+}
+
+export function useAuditViews() {
+  const apiClient = useApiClient();
+  return useQuery<AuditView[]>({
+    queryKey: ['admin', 'audit', 'views'],
+    queryFn: () => apiClient.get<AuditView[]>('/v1/admin/audit/views'),
+  });
+}
+
+export function useCreateAuditView() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; filters: Record<string, unknown> }) =>
+      apiClient.post<AuditView>('/v1/admin/audit/views', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'audit', 'views'] }),
+  });
+}
+
+export function useDeleteAuditView() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/admin/audit/views/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'audit', 'views'] }),
+  });
+}
+
+// ─── OVERRIDES / GOVERNANCE ───────────────────────────────────────────────────
+
+export interface AdminOverride {
+  featureKey: string;
+  value: unknown;
+  reason?: string;
+  createdAt: string;
+}
+
+export function useAdminOverrides() {
+  const apiClient = useApiClient();
+  return useQuery<AdminOverride[]>({
+    queryKey: ['admin', 'overrides'],
+    queryFn: () => apiClient.get<AdminOverride[]>('/v1/admin/overrides'),
+  });
+}
+
+export function useCreateAdminOverride() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { featureKey: string; value: unknown; reason?: string }) =>
+      apiClient.post<AdminOverride>('/v1/admin/overrides', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'overrides'] }),
+  });
+}
+
+export function useDeleteAdminOverride() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (featureKey: string) => apiClient.delete<void>(`/v1/admin/overrides/${featureKey}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'overrides'] }),
+  });
+}
+
+export function useGovernanceAiSettings() {
+  const apiClient = useApiClient();
+  return useQuery({
+    queryKey: ['admin', 'overrides', 'governance', 'ai'],
+    queryFn: () => apiClient.get<Record<string, unknown>>('/v1/admin/overrides/governance/ai'),
+  });
+}
+
+export function useUpdateGovernanceAiSettings() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: Record<string, unknown>) =>
+      apiClient.patch<Record<string, unknown>>('/v1/admin/overrides/governance/ai', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'overrides', 'governance', 'ai'] }),
+  });
+}
+
+export function useFeatureAccessList() {
+  const apiClient = useApiClient();
+  return useQuery({
+    queryKey: ['admin', 'overrides', 'feature-access'],
+    queryFn: () => apiClient.get<Record<string, boolean>>('/v1/admin/overrides/feature-access/list'),
+  });
+}
+
+export function useSetFeatureAccess() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { featureKey: string; enabled: boolean }) =>
+      apiClient.post<{ success: boolean }>('/v1/admin/overrides/feature-access', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'overrides', 'feature-access'] }),
+  });
+}
+
+// ─── KNOWLEDGE BASE — EXTENDED ───────────────────────────────────────────────
+
+export function useKnowledgeDocumentById(id: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<KnowledgeDocument>({
+    queryKey: ['admin', 'documents', id],
+    queryFn: () => apiClient.get<KnowledgeDocument>(`/v1/knowledge-documents/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateKnowledgeDocument() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: Partial<KnowledgeDocument> & { id: string }) =>
+      apiClient.put<KnowledgeDocument>(`/v1/knowledge-documents/${id}`, dto),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'documents'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'documents', id] });
+    },
+  });
+}
+
+export function usePublishKnowledgeDocument() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, publishedAt }: { id: string; publishedAt?: string }) =>
+      apiClient.post<KnowledgeDocument>(`/v1/knowledge-documents/${id}/publish`, { publishedAt }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'documents'] }),
+  });
+}
+
+export function useArchiveKnowledgeDocument() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<KnowledgeDocument>(`/v1/knowledge-documents/${id}/archive`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'documents'] }),
+  });
+}
+
+export function useIngestKnowledgeDocument() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<{ jobId: string }>(`/v1/knowledge-documents/${id}/ingest`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'documents'] }),
+  });
+}
+
+export interface KnowledgeDocumentVersion {
+  id: string;
+  documentId: string;
+  version: number;
+  title: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export function useKnowledgeDocumentVersions(documentId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<KnowledgeDocumentVersion[]>({
+    queryKey: ['admin', 'documents', documentId, 'versions'],
+    queryFn: () => apiClient.get<KnowledgeDocumentVersion[]>(`/v1/knowledge-versions/document/${documentId}`),
+    enabled: !!documentId,
+  });
+}
+
+export function useCreateKnowledgeCategory() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; slug: string; description?: string; parentId?: string }) =>
+      apiClient.post<KnowledgeCategory>('/v1/knowledge-categories', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'knowledge-categories'] }),
+  });
+}
+
+export function useUpdateKnowledgeCategory() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: Partial<KnowledgeCategory> & { id: string }) =>
+      apiClient.put<KnowledgeCategory>(`/v1/knowledge-categories/${id}`, dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'knowledge-categories'] }),
+  });
+}
+
+export function useDeleteKnowledgeCategory() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/knowledge-categories/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'knowledge-categories'] }),
+  });
+}
+
+export function useUpdateKnowledgeSource() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: Partial<KnowledgeSource> & { id: string }) =>
+      apiClient.put<KnowledgeSource>(`/v1/knowledge-sources/${id}`, dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'knowledge-sources'] }),
+  });
+}
+
+export function useDeleteKnowledgeSource() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/knowledge-sources/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'knowledge-sources'] }),
+  });
+}
+
+export function useSyncKnowledgeSource() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<{ jobId: string }>(`/v1/knowledge-sources/${id}/sync`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'knowledge-sources'] }),
+  });
+}
+
+// ─── CHANNELS — EXTENDED ─────────────────────────────────────────────────────
+
+export function useChannelById(id: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<CommunicationChannel>({
+    queryKey: ['admin', 'channels', id],
+    queryFn: () => apiClient.get<CommunicationChannel>(`/v1/channels/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateChannel() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: {
+      name: string;
+      channelType: string;
+      description?: string;
+      config?: Record<string, unknown>;
+    }) => apiClient.post<CommunicationChannel>('/v1/channels', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'channels'] }),
+  });
+}
+
+export function useUpdateChannel() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: Partial<CommunicationChannel> & { id: string }) =>
+      apiClient.put<CommunicationChannel>(`/v1/channels/${id}`, dto),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'channels'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'channels', id] });
+    },
+  });
+}
+
+export function useChannelConfig(channelId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery({
+    queryKey: ['admin', 'channels', channelId, 'config'],
+    queryFn: () => apiClient.get<Record<string, unknown>>(`/v1/channels/${channelId}/config`),
+    enabled: !!channelId,
+  });
+}
+
+export function useSaveChannelConfig() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelId, ...config }: { channelId: string } & Record<string, unknown>) =>
+      apiClient.post<Record<string, unknown>>(`/v1/channels/${channelId}/config`, config),
+    onSuccess: (_, { channelId }) =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'channels', channelId, 'config'] }),
+  });
+}
+
+export function useRotateChannelSecrets() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (channelId: string) =>
+      apiClient.post<{ webhookSecret: string }>(`/v1/channels/${channelId}/rotate-secrets`),
+    onSuccess: (_, channelId) =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'channels', channelId] }),
+  });
+}
+
+export function useCheckChannelHealth() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (channelId: string) =>
+      apiClient.post<{ status: string; latencyMs: number }>(`/v1/channels/${channelId}/health/check`),
+    onSuccess: (_, channelId) =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'channels', channelId, 'health'] }),
+  });
+}
+
+export function useChannelHealth(channelId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery({
+    queryKey: ['admin', 'channels', channelId, 'health'],
+    queryFn: () => apiClient.get<{ status: string; latencyMs: number; lastCheckAt: string }>(
+      `/v1/channels/${channelId}/health`,
+    ),
+    enabled: !!channelId,
+  });
+}
+
+export function useChannelTemplates(channelId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<{ name: string; body: string; language: string }[]>({
+    queryKey: ['admin', 'channels', channelId, 'templates'],
+    queryFn: () =>
+      apiClient.get<{ name: string; body: string; language: string }[]>(
+        `/v1/channels/${channelId}/templates`,
+      ),
+    enabled: !!channelId,
+  });
+}
+
+export function useCreateChannelTemplate() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      channelId,
+      ...dto
+    }: {
+      channelId: string;
+      name: string;
+      body: string;
+      language: string;
+    }) => apiClient.post<{ name: string; body: string; language: string }>(`/v1/channels/${channelId}/templates`, dto),
+    onSuccess: (_, { channelId }) =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'channels', channelId, 'templates'] }),
+  });
+}
+
+export function useDeleteChannelTemplate() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelId, name }: { channelId: string; name: string }) =>
+      apiClient.delete<void>(`/v1/channels/${channelId}/templates/${encodeURIComponent(name)}`),
+    onSuccess: (_, { channelId }) =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'channels', channelId, 'templates'] }),
+  });
+}
+
+// ─── CONNECTORS — EXTENDED ───────────────────────────────────────────────────
+
+export function useConnectorById(id: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<Connector>({
+    queryKey: ['admin', 'connectors', id],
+    queryFn: () => apiClient.get<Connector>(`/v1/connectors/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useConfigureConnector() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: { id: string } & Record<string, unknown>) =>
+      apiClient.put<Connector>(`/v1/connectors/${id}`, dto),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'connectors'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'connectors', id] });
+    },
+  });
+}
+
+export function useDeleteConnector() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/connectors/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'connectors'] }),
+  });
+}
+
+export function useImportConnectorOpenApi() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { url?: string; spec?: string; name: string }) =>
+      apiClient.post<Connector>('/v1/connectors/import/openapi', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'connectors'] }),
+  });
+}
+
+export function useMapConnectorCapabilities() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      capabilities,
+    }: {
+      id: string;
+      capabilities: { type: string; endpoint: string; method: string }[];
+    }) => apiClient.post<Connector>(`/v1/connectors/${id}/capabilities`, { capabilities }),
+    onSuccess: (_, { id }) => queryClient.invalidateQueries({ queryKey: ['admin', 'connectors', id] }),
+  });
+}
+
+export function useCheckConnectorHealth() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post<{ status: string; latencyMs: number }>(`/v1/connectors/${id}/health`),
+  });
+}
+
+export function useConnectorInstances(connectorId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<{ id: string; instanceName: string; status: string; createdAt: string }[]>({
+    queryKey: ['admin', 'connectors', connectorId, 'instances'],
+    queryFn: () =>
+      apiClient.get<{ id: string; instanceName: string; status: string; createdAt: string }[]>(
+        `/v1/connectors/${connectorId}/instances`,
+      ),
+    enabled: !!connectorId,
+  });
+}
+
+export function useCreateConnectorInstance() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      connectorId,
+      ...dto
+    }: {
+      connectorId: string;
+      instanceName: string;
+      config?: Record<string, unknown>;
+    }) =>
+      apiClient.post<{ id: string; instanceName: string }>(`/v1/connectors/${connectorId}/instances`, dto),
+    onSuccess: (_, { connectorId }) =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'connectors', connectorId, 'instances'] }),
+  });
+}
+
+export function useDeleteConnectorInstance() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ connectorId, instanceId }: { connectorId: string; instanceId: string }) =>
+      apiClient.delete<void>(`/v1/connectors/instances/${instanceId}`),
+    onSuccess: (_, { connectorId }) =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'connectors', connectorId, 'instances'] }),
+  });
+}
+
+export function useConnectorWebhooks(connectorId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<{ id: string; url: string; events: string[]; active: boolean }[]>({
+    queryKey: ['admin', 'connectors', connectorId, 'webhooks'],
+    queryFn: () =>
+      apiClient.get<{ id: string; url: string; events: string[]; active: boolean }[]>(
+        `/v1/connectors/${connectorId}/webhooks`,
+      ),
+    enabled: !!connectorId,
+  });
+}
+
+export function useConnectorExecutionById(executionId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<ConnectorExecution>({
+    queryKey: ['admin', 'connectors', 'executions', executionId],
+    queryFn: () => apiClient.get<ConnectorExecution>(`/v1/connectors/executions/${executionId}`),
+    enabled: !!executionId,
+  });
+}
+
+// ─── WORKFLOWS — EXTENDED ────────────────────────────────────────────────────
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
+  triggerType: string;
+  steps: Record<string, unknown>[];
+  createdAt: string;
+}
+
+export function useWorkflowTemplateById(id: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<WorkflowTemplate>({
+    queryKey: ['admin', 'workflows', 'templates', id],
+    queryFn: () => apiClient.get<WorkflowTemplate>(`/v1/workflows/templates/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateWorkflowTemplate() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: {
+      name: string;
+      description?: string;
+      triggerType: string;
+      steps: Record<string, unknown>[];
+    }) => apiClient.post<WorkflowTemplate>('/v1/workflows/templates', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'workflows'] }),
+  });
+}
+
+export function useUpdateWorkflowTemplate() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: Partial<WorkflowTemplate> & { id: string }) =>
+      apiClient.put<WorkflowTemplate>(`/v1/workflows/templates/${id}`, dto),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'workflows'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'workflows', 'templates', id] });
+    },
+  });
+}
+
+export function useDeleteWorkflowTemplate() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/workflows/templates/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'workflows'] }),
+  });
+}
+
+export function usePublishWorkflowTemplate() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<WorkflowTemplate>(`/v1/workflows/templates/${id}/publish`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'workflows'] }),
+  });
+}
+
+export interface WorkflowApproval {
+  id: string;
+  executionId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requesterNote?: string;
+  decidedAt?: string;
+  createdAt: string;
+}
+
+export function useWorkflowApprovalsByExecution(executionId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<WorkflowApproval[]>({
+    queryKey: ['admin', 'workflows', 'approvals', 'execution', executionId],
+    queryFn: () => apiClient.get<WorkflowApproval[]>(`/v1/workflows/approvals/execution/${executionId}`),
+    enabled: !!executionId,
+  });
+}
+
+export function useApproveWorkflow() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string }) =>
+      apiClient.post<WorkflowApproval>(`/v1/workflows/approvals/${id}/approve`, { note }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'workflows', 'approvals'] }),
+  });
+}
+
+export function useRejectWorkflow() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string }) =>
+      apiClient.post<WorkflowApproval>(`/v1/workflows/approvals/${id}/reject`, { note }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'workflows', 'approvals'] }),
+  });
+}
+
+export function useWorkflowAudit(params?: { workflowId?: string; executionId?: string }) {
+  const apiClient = useApiClient();
+  return useQuery<{ data: AuditLogRecord[]; total: number }>({
+    queryKey: ['admin', 'workflows', 'audit', params],
+    queryFn: () =>
+      apiClient.get<{ data: AuditLogRecord[]; total: number }>('/v1/workflows/audit', {
+        query: params as Record<string, string>,
+      }),
+  });
+}
+
+export interface WorkflowSchedule {
+  id: string;
+  workflowId: string;
+  cronExpression: string;
+  active: boolean;
+  timezone?: string;
+  nextRunAt?: string;
+}
+
+export function useWorkflowSchedules() {
+  const apiClient = useApiClient();
+  return useQuery<WorkflowSchedule[]>({
+    queryKey: ['admin', 'workflows', 'schedules'],
+    queryFn: () => apiClient.get<WorkflowSchedule[]>('/v1/workflows/schedules'),
+  });
+}
+
+export function useCreateWorkflowSchedule() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { workflowId: string; cronExpression: string; timezone?: string }) =>
+      apiClient.post<WorkflowSchedule>('/v1/workflows/schedules', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'workflows', 'schedules'] }),
+  });
+}
+
+export function useToggleWorkflowSchedule() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      apiClient.post<WorkflowSchedule>(`/v1/workflows/schedules/${id}/toggle`, { active }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'workflows', 'schedules'] }),
+  });
+}
+
+export function useDeleteWorkflowSchedule() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/workflows/schedules/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'workflows', 'schedules'] }),
+  });
+}
+
+// ─── TICKET CATEGORIES ───────────────────────────────────────────────────────
+
+export interface TicketCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export function useTicketCategories() {
+  const apiClient = useApiClient();
+  return useQuery<TicketCategory[]>({
+    queryKey: ['admin', 'ticket-categories'],
+    queryFn: () => apiClient.get<TicketCategory[]>('/v1/ticket-categories'),
+  });
+}
+
+export function useCreateTicketCategory() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; slug: string; description?: string }) =>
+      apiClient.post<TicketCategory>('/v1/ticket-categories', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'ticket-categories'] }),
+  });
+}
+
+export function useUpdateTicketCategory() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: Partial<TicketCategory> & { id: string }) =>
+      apiClient.put<TicketCategory>(`/v1/ticket-categories/${id}`, dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'ticket-categories'] }),
+  });
+}
+
+export function useDeleteTicketCategory() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/ticket-categories/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'ticket-categories'] }),
+  });
+}
+
+// ─── CUSTOMERS (admin view) ───────────────────────────────────────────────────
+
+export interface AdminCustomer {
+  id: string;
+  email?: string;
+  phone?: string;
+  name?: string;
+  externalId?: string;
+  status: string;
+  segmentIds: string[];
+  createdAt: string;
+}
+
+export interface CustomerSegment {
+  id: string;
+  name: string;
+  description?: string;
+  rules?: Record<string, unknown>;
+  memberCount: number;
+  createdAt: string;
+}
+
+export function useAdminCustomers(params?: { search?: string; limit?: number; cursor?: string }) {
+  const apiClient = useApiClient();
+  return useQuery<{ data: AdminCustomer[]; total: number; nextCursor?: string }>({
+    queryKey: ['admin', 'customers', params],
+    queryFn: () =>
+      apiClient.get<{ data: AdminCustomer[]; total: number; nextCursor?: string }>('/v1/customers', {
+        query: { limit: '50', ...params } as Record<string, string>,
+      }),
+  });
+}
+
+export function useAdminCustomerById(id: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<AdminCustomer>({
+    queryKey: ['admin', 'customers', id],
+    queryFn: () => apiClient.get<AdminCustomer>(`/v1/customers/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateAdminCustomer() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { email?: string; phone?: string; name?: string; externalId?: string }) =>
+      apiClient.post<AdminCustomer>('/v1/customers', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customers'] }),
+  });
+}
+
+export function useUpdateAdminCustomer() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: Partial<AdminCustomer> & { id: string }) =>
+      apiClient.put<AdminCustomer>(`/v1/customers/${id}`, dto),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'customers'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'customers', id] });
+    },
+  });
+}
+
+export function useDeleteAdminCustomer() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/customers/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customers'] }),
+  });
+}
+
+export function useExportCustomers() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: (format: 'CSV' | 'JSON') =>
+      apiClient.get<Blob>('/v1/customers/export', { query: { format } }),
+  });
+}
+
+export function useAdminCustomerTimeline(customerId: string | undefined) {
+  const apiClient = useApiClient();
+  return useQuery<{ type: string; data: Record<string, unknown>; createdAt: string }[]>({
+    queryKey: ['admin', 'customers', customerId, 'timeline'],
+    queryFn: () =>
+      apiClient.get<{ type: string; data: Record<string, unknown>; createdAt: string }[]>(
+        `/v1/customers/${customerId}/timeline`,
+      ),
+    enabled: !!customerId,
+  });
+}
+
+export function useCustomerSegments() {
+  const apiClient = useApiClient();
+  return useQuery<CustomerSegment[]>({
+    queryKey: ['admin', 'customer-segments'],
+    queryFn: () => apiClient.get<CustomerSegment[]>('/v1/customer-segments'),
+  });
+}
+
+export function useCreateCustomerSegment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; description?: string; rules?: Record<string, unknown> }) =>
+      apiClient.post<CustomerSegment>('/v1/customer-segments', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] }),
+  });
+}
+
+export function useDeleteCustomerSegment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/customer-segments/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] }),
+  });
+}
+
+// ─── SETTINGS — EXTENDED ─────────────────────────────────────────────────────
+
+export interface NotificationSettings {
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  pushEnabled: boolean;
+  inAppEnabled: boolean;
+  digestFrequency: 'REALTIME' | 'HOURLY' | 'DAILY';
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
+}
+
+export interface SlaSettings {
+  firstResponseSlaMinutes: number;
+  resolutionSlaMinutes: number;
+  breachNotificationEnabled: boolean;
+  breachNotificationMinutesBefore: number;
+  businessHoursOnly: boolean;
+}
+
+export const useNotificationSettings = settingsQuery<NotificationSettings>(
+  'notifications',
+  '/v1/settings/notifications',
+);
+export const useUpdateNotificationSettings = settingsMutation<Partial<NotificationSettings>>(
+  'notifications',
+  '/v1/settings/notifications',
+);
+
+export const useSlaSettings = settingsQuery<SlaSettings>('sla', '/v1/settings/sla');
+export const useUpdateSlaSettings = settingsMutation<Partial<SlaSettings>>('sla', '/v1/settings/sla');
+
+export function useDeleteBusinessHours() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/settings/business-hours/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'business-hours'] }),
+  });
+}
+
+export function useDeleteFeatureFlag() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/settings/feature-flags/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'feature-flags'] }),
+  });
+}
+
+// ─── HARDENING ────────────────────────────────────────────────────────────────
+
+export function useHardeningCost() {
+  const apiClient = useApiClient();
+  return useQuery<{ totalCostUsd: number; breakdown: Record<string, number> }>({
+    queryKey: ['admin', 'hardening', 'cost'],
+    queryFn: () =>
+      apiClient.get<{ totalCostUsd: number; breakdown: Record<string, number> }>('/v1/hardening/cost'),
+  });
+}
+
+export function useReplayOutbox() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: () => apiClient.post<{ replayed: number }>('/v1/hardening/outbox/replay'),
+  });
+}

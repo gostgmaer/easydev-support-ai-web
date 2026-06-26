@@ -581,3 +581,714 @@ export function useAddTicketComment() {
     },
   });
 }
+
+// ─── INBOX COUNTERS & VIEWS ───────────────────────────────────────────────────
+
+export interface InboxCounters {
+  all: number;
+  mine: number;
+  unassigned: number;
+  snoozed: number;
+  bookmarks: number;
+  escalated: number;
+}
+
+export function useInboxCounters() {
+  const api = useApiClient();
+  return useQuery<InboxCounters>({
+    queryKey: ['inbox', 'counters'],
+    queryFn: () => api.get<InboxCounters>('/v1/inbox/counters'),
+    refetchInterval: 30000,
+  });
+}
+
+export interface SavedView {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  createdAt: string;
+}
+
+export function useInboxSavedViews() {
+  const api = useApiClient();
+  return useQuery<SavedView[]>({
+    queryKey: ['inbox', 'saved-views'],
+    queryFn: () => api.get<SavedView[]>('/v1/inbox/saved-views'),
+  });
+}
+
+export function useCreateInboxSavedView() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; filters: Record<string, unknown> }) =>
+      api.post<SavedView>('/v1/inbox/saved-views', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox', 'saved-views'] }),
+  });
+}
+
+export function useDeleteInboxSavedView() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<void>(`/v1/inbox/saved-views/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox', 'saved-views'] }),
+  });
+}
+
+// ─── INBOX AI CONTROL ACTIONS ─────────────────────────────────────────────────
+
+export function useTakeOverConversation() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const updateConversation = useInboxStore((state) => state.updateConversation);
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      api.post<{ success: boolean }>(`/v1/inbox/${conversationId}/take-over`),
+    onMutate: (conversationId) => updateConversation(conversationId, { aiStatus: 'paused' }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useReturnToAi() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const updateConversation = useInboxStore((state) => state.updateConversation);
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      api.post<{ success: boolean }>(`/v1/inbox/${conversationId}/return-to-ai`),
+    onMutate: (conversationId) => updateConversation(conversationId, { aiStatus: 'active' }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function usePauseAi() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      api.post<{ success: boolean }>(`/v1/inbox/${conversationId}/pause-ai`),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useResumeAi() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      api.post<{ success: boolean }>(`/v1/inbox/${conversationId}/resume-ai`),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useDecideAiDraft() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      decision,
+      editedContent,
+    }: {
+      conversationId: string;
+      decision: 'APPROVE' | 'REJECT' | 'EDIT';
+      editedContent?: string;
+    }) => api.post<{ success: boolean }>(`/v1/inbox/${conversationId}/ai-draft`, { decision, editedContent }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useReplayWorkflow() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      workflowId,
+    }: {
+      conversationId: string;
+      workflowId: string;
+    }) => api.post<{ executionId: string }>(`/v1/inbox/${conversationId}/replay-workflow`, { workflowId }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useRetryConnector() {
+  const api = useApiClient();
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      connectorId,
+    }: {
+      conversationId: string;
+      connectorId: string;
+    }) => api.post<{ success: boolean }>(`/v1/inbox/${conversationId}/retry-connector`, { connectorId }),
+  });
+}
+
+// ─── INBOX ASSIGNMENT EXTENDED ───────────────────────────────────────────────
+
+export function useBulkAssign() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationIds, agentProfileId }: { conversationIds: string[]; agentProfileId: string }) =>
+      api.post<{ assigned: number }>('/v1/inbox/bulk/assign', { conversationIds, agentProfileId }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useForceAssign() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const updateConversation = useInboxStore((state) => state.updateConversation);
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      agentProfileId,
+    }: {
+      conversationId: string;
+      agentProfileId: string;
+    }) =>
+      api.post<{ success: boolean }>(`/v1/inbox/${conversationId}/force-assign`, { agentProfileId }),
+    onMutate: ({ conversationId, agentProfileId }) =>
+      updateConversation(conversationId, { assignedAgentId: agentProfileId }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useTransferConversation() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      toAgentProfileId,
+      note,
+    }: {
+      conversationId: string;
+      toAgentProfileId: string;
+      note?: string;
+    }) =>
+      api.post<{ success: boolean }>(`/v1/inbox/${conversationId}/transfer`, { toAgentProfileId, note }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useAssignTeamToConversation() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, teamId }: { conversationId: string; teamId: string }) =>
+      api.post<{ success: boolean }>(`/v1/inbox/${conversationId}/assign-team`, { teamId }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useRoundRobinAssign() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, teamId }: { conversationId: string; teamId: string }) =>
+      api.post<{ agentProfileId: string }>(`/v1/inbox/${conversationId}/round-robin`, { teamId }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useUnassignConversation() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const updateConversation = useInboxStore((state) => state.updateConversation);
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      api.post<{ success: boolean }>(`/v1/inbox/${conversationId}/unassign`),
+    onMutate: (conversationId) => updateConversation(conversationId, { assignedAgentId: undefined }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+// ─── CONVERSATION ACTIVITY FEED ───────────────────────────────────────────────
+
+export interface ActivityEntry {
+  id: string;
+  type: string;
+  actorId?: string;
+  actorName?: string;
+  data: Record<string, unknown>;
+  createdAt: string;
+}
+
+export function useConversationActivity(conversationId: string | null) {
+  const api = useApiClient();
+  return useQuery<ActivityEntry[]>({
+    queryKey: ['conversation-activity', conversationId],
+    queryFn: () =>
+      api.get<ActivityEntry[]>(`/v1/inbox/${conversationId}/activity`, { query: { limit: '50' } }),
+    enabled: !!conversationId,
+  });
+}
+
+// ─── PRESENCE ────────────────────────────────────────────────────────────────
+
+export function usePresenceHeartbeat() {
+  const api = useApiClient();
+  return useMutation({
+    mutationFn: () => api.post<{ ok: boolean }>('/v1/inbox/presence/heartbeat'),
+  });
+}
+
+export function useOnlineAgents() {
+  const api = useApiClient();
+  return useQuery<{ agentProfileId: string; status: string; lastSeenAt: string }[]>({
+    queryKey: ['inbox', 'presence', 'online'],
+    queryFn: () =>
+      api.get<{ agentProfileId: string; status: string; lastSeenAt: string }[]>('/v1/inbox/presence/online'),
+    refetchInterval: 60000,
+  });
+}
+
+// ─── CONVERSATION NOTES ───────────────────────────────────────────────────────
+
+export interface ConversationNote {
+  id: string;
+  conversationId: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  mentions: string[];
+  createdAt: string;
+}
+
+export function useConversationNotes(conversationId: string | null) {
+  const api = useApiClient();
+  return useQuery<ConversationNote[]>({
+    queryKey: ['conversation-notes', conversationId],
+    queryFn: () => api.get<ConversationNote[]>(`/v1/conversations/${conversationId}/notes`),
+    enabled: !!conversationId,
+  });
+}
+
+export function useAddConversationNote() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, content }: { conversationId: string; content: string }) =>
+      api.post<ConversationNote>(`/v1/conversations/${conversationId}/notes`, { content }),
+    onSuccess: (_, { conversationId }) =>
+      queryClient.invalidateQueries({ queryKey: ['conversation-notes', conversationId] }),
+  });
+}
+
+export function useMentionInNote() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      userId,
+      noteId,
+    }: {
+      conversationId: string;
+      userId: string;
+      noteId: string;
+    }) => api.post<{ success: boolean }>(`/v1/conversations/${conversationId}/notes/mentions`, { userId, noteId }),
+    onSuccess: (_, { conversationId }) =>
+      queryClient.invalidateQueries({ queryKey: ['conversation-notes', conversationId] }),
+  });
+}
+
+// ─── TICKET LIFECYCLE ACTIONS ─────────────────────────────────────────────────
+
+export function useTicketLifecycleAction() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const updateTicketState = useTicketStore((state) => state.updateTicket);
+
+  return useMutation({
+    mutationFn: async ({
+      ticketId,
+      action,
+      payload,
+    }: {
+      ticketId: string;
+      action: 'start' | 'resolve' | 'close' | 'reopen' | 'escalate';
+      payload?: Record<string, unknown>;
+    }) => {
+      return api.post<{ success: boolean }>(`/v1/tickets/${ticketId}/${action}`, payload ?? {});
+    },
+    onMutate: ({ ticketId, action }) => {
+      const statusMap: Record<string, string> = {
+        start: 'in_progress',
+        resolve: 'resolved',
+        close: 'closed',
+        reopen: 'open',
+        escalate: 'escalated',
+      };
+      if (statusMap[action]) updateTicketState(ticketId, { status: statusMap[action] as any });
+    },
+    onSettled: (_, __, { ticketId }) => {
+      queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] });
+    },
+  });
+}
+
+export function useAssignTicket() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      agentProfileId,
+    }: {
+      ticketId: string;
+      agentProfileId: string;
+    }) => api.post<{ success: boolean }>(`/v1/tickets/${ticketId}/assign`, { agentProfileId }),
+    onSettled: (_, __, { ticketId }) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] }),
+  });
+}
+
+export function useTransferTicket() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      toTeamId,
+      note,
+    }: {
+      ticketId: string;
+      toTeamId: string;
+      note?: string;
+    }) => api.post<{ success: boolean }>(`/v1/tickets/${ticketId}/transfer`, { toTeamId, note }),
+    onSettled: (_, __, { ticketId }) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] }),
+  });
+}
+
+export function useTicketApprovals(ticketId: string | null) {
+  const api = useApiClient();
+  return useQuery<{ id: string; status: string; requesterNote?: string; createdAt: string }[]>({
+    queryKey: ['ticket-approvals', ticketId],
+    queryFn: () =>
+      api.get<{ id: string; status: string; requesterNote?: string; createdAt: string }[]>(
+        `/v1/tickets/${ticketId}/approvals`,
+      ),
+    enabled: !!ticketId,
+  });
+}
+
+export function useRequestTicketApproval() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketId, note }: { ticketId: string; note?: string }) =>
+      api.post<{ id: string }>(`/v1/tickets/${ticketId}/approvals`, { note }),
+    onSuccess: (_, { ticketId }) =>
+      queryClient.invalidateQueries({ queryKey: ['ticket-approvals', ticketId] }),
+  });
+}
+
+export function useDecideTicketApproval() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      approvalId,
+      decision,
+      note,
+      ticketId,
+    }: {
+      approvalId: string;
+      ticketId: string;
+      decision: 'approve' | 'reject';
+      note?: string;
+    }) => api.post<{ success: boolean }>(`/v1/approvals/${approvalId}/${decision}`, { note }),
+    onSuccess: (_, { ticketId }) =>
+      queryClient.invalidateQueries({ queryKey: ['ticket-approvals', ticketId] }),
+  });
+}
+
+export function useTicketSla(ticketId: string | null) {
+  const api = useApiClient();
+  return useQuery<{
+    firstResponseSla: { dueAt: string; breached: boolean };
+    resolutionSla: { dueAt: string; breached: boolean };
+  }>({
+    queryKey: ['ticket-sla', ticketId],
+    queryFn: () =>
+      api.get<{
+        firstResponseSla: { dueAt: string; breached: boolean };
+        resolutionSla: { dueAt: string; breached: boolean };
+      }>(`/v1/tickets/${ticketId}/sla`),
+    enabled: !!ticketId,
+  });
+}
+
+export function useTicketAttachments(ticketId: string | null) {
+  const api = useApiClient();
+  return useQuery<{ id: string; fileName: string; mimeType: string; sizeBytes: number; url: string }[]>({
+    queryKey: ['ticket-attachments', ticketId],
+    queryFn: () =>
+      api.get<{ id: string; fileName: string; mimeType: string; sizeBytes: number; url: string }[]>(
+        `/v1/tickets/${ticketId}/attachments`,
+      ),
+    enabled: !!ticketId,
+  });
+}
+
+export function useAddTicketWatcher() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketId, userId }: { ticketId: string; userId: string }) =>
+      api.post<{ success: boolean }>(`/v1/tickets/${ticketId}/watchers`, { userId }),
+    onSuccess: (_, { ticketId }) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] }),
+  });
+}
+
+export function useRemoveTicketWatcher() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketId, userId }: { ticketId: string; userId: string }) =>
+      api.delete<void>(`/v1/tickets/${ticketId}/watchers/${userId}`),
+    onSuccess: (_, { ticketId }) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] }),
+  });
+}
+
+// ─── MESSAGE EXTENDED ACTIONS ─────────────────────────────────────────────────
+
+export function useAddMessageReaction() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      messageId,
+      conversationId,
+      emoji,
+    }: {
+      messageId: string;
+      conversationId: string;
+      emoji: string;
+    }) => api.post<{ success: boolean }>(`/v1/messages/${messageId}/reactions`, { emoji }),
+    onSuccess: (_, { conversationId }) =>
+      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] }),
+  });
+}
+
+export function useRemoveMessageReaction() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      messageId,
+      conversationId,
+      emoji,
+    }: {
+      messageId: string;
+      conversationId: string;
+      emoji: string;
+    }) => api.delete<void>(`/v1/messages/${messageId}/reactions`, { body: { emoji } }),
+    onSuccess: (_, { conversationId }) =>
+      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] }),
+  });
+}
+
+export function useRetryMessage() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, conversationId }: { messageId: string; conversationId: string }) =>
+      api.post<{ success: boolean }>(`/v1/messages/${messageId}/retry`),
+    onSuccess: (_, { conversationId }) =>
+      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] }),
+  });
+}
+
+export function useMessageDelivery(messageId: string | null) {
+  const api = useApiClient();
+  return useQuery<{
+    status: string;
+    deliveredAt?: string;
+    readAt?: string;
+    failureReason?: string;
+  }>({
+    queryKey: ['message-delivery', messageId],
+    queryFn: () =>
+      api.get<{ status: string; deliveredAt?: string; readAt?: string; failureReason?: string }>(
+        `/v1/messages/${messageId}/delivery`,
+      ),
+    enabled: !!messageId,
+  });
+}
+
+export function useDeleteMessage() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, conversationId }: { messageId: string; conversationId: string }) =>
+      api.delete<void>(`/v1/messages/${messageId}`),
+    onSuccess: (_, { conversationId }) =>
+      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] }),
+  });
+}
+
+// ─── DRAFTS ───────────────────────────────────────────────────────────────────
+
+export interface Draft {
+  id: string;
+  conversationId: string;
+  content: string;
+  senderType: string;
+  isInternalNote: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function useMyConversationDraft(conversationId: string | null) {
+  const api = useApiClient();
+  return useQuery<Draft | null>({
+    queryKey: ['draft', conversationId],
+    queryFn: async () => {
+      const result = await api.get<Draft[]>(`/v1/drafts/conversation/${conversationId}/mine`);
+      return result[0] ?? null;
+    },
+    enabled: !!conversationId,
+    staleTime: 0,
+  });
+}
+
+export function useSaveDraft() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      content,
+      isInternalNote,
+    }: {
+      conversationId: string;
+      content: string;
+      isInternalNote: boolean;
+    }) => api.post<Draft>('/v1/drafts', { conversationId, content, isInternalNote }),
+    onSuccess: (_, { conversationId }) =>
+      queryClient.invalidateQueries({ queryKey: ['draft', conversationId] }),
+  });
+}
+
+export function useSendDraft() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ draftId, conversationId }: { draftId: string; conversationId: string }) =>
+      api.post<{ messageId: string }>(`/v1/drafts/${draftId}/send`),
+    onSuccess: (_, { conversationId }) => {
+      queryClient.invalidateQueries({ queryKey: ['draft', conversationId] });
+      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+    },
+  });
+}
+
+export function useDeleteDraft() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ draftId, conversationId }: { draftId: string; conversationId: string }) =>
+      api.delete<void>(`/v1/drafts/${draftId}`),
+    onSuccess: (_, { conversationId }) =>
+      queryClient.invalidateQueries({ queryKey: ['draft', conversationId] }),
+  });
+}
+
+// ─── CUSTOMER TIMELINE ────────────────────────────────────────────────────────
+
+export function useCustomerTimeline(customerId: string | null) {
+  const api = useApiClient();
+  return useQuery<{ type: string; data: Record<string, unknown>; createdAt: string }[]>({
+    queryKey: ['customer-timeline', customerId],
+    queryFn: () =>
+      api.get<{ type: string; data: Record<string, unknown>; createdAt: string }[]>(
+        `/v1/customers/${customerId}/timeline`,
+      ),
+    enabled: !!customerId,
+  });
+}
+
+// ─── IAM PROFILE ─────────────────────────────────────────────────────────────
+
+export interface IamProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
+  timezone?: string;
+  locale?: string;
+}
+
+export interface IamSession {
+  id: string;
+  userAgent: string;
+  ipAddress: string;
+  createdAt: string;
+  lastActiveAt: string;
+  isCurrent: boolean;
+}
+
+export function useIamProfile() {
+  const api = useApiClient();
+  return useQuery<IamProfile>({
+    queryKey: ['iam', 'me', 'profile'],
+    queryFn: () => api.get<IamProfile>('/v1/iam/me/profile'),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useUpdateIamProfile() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: Partial<IamProfile>) => api.patch<IamProfile>('/v1/iam/me/profile', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['iam', 'me', 'profile'] }),
+  });
+}
+
+export function useChangePassword() {
+  const api = useApiClient();
+  return useMutation({
+    mutationFn: (dto: { currentPassword: string; newPassword: string }) =>
+      api.post<{ success: boolean }>('/v1/iam/me/password/change', dto),
+  });
+}
+
+export function useIamSessions() {
+  const api = useApiClient();
+  return useQuery<IamSession[]>({
+    queryKey: ['iam', 'me', 'sessions'],
+    queryFn: () => api.get<IamSession[]>('/v1/iam/me/sessions'),
+  });
+}
+
+export function useRevokeIamSession() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) => api.delete<void>(`/v1/iam/me/sessions/${sessionId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['iam', 'me', 'sessions'] }),
+  });
+}
+
+// ─── ARCHIVE CONVERSATION ─────────────────────────────────────────────────────
+
+export function useArchiveConversation() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  const updateConversation = useInboxStore((state) => state.updateConversation);
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      api.post<{ success: boolean }>(`/v1/conversations/${conversationId}/archive`),
+    onMutate: (conversationId) => updateConversation(conversationId, { status: 'archived' as any }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
