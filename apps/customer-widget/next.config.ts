@@ -80,6 +80,7 @@ const ROOT_ROUTES = ['/'];
 const WIDGET_ROUTES = ['/widget', '/chat', '/help', '/tickets', '/history', '/feedback'];
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   transpilePackages: [
     '@easydev/types',
     '@easydev/utils',

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Settings, Image, Clock, ShieldAlert, Trash2, Plus, Building2, AlertTriangle, Copy, Eye, EyeOff, RefreshCw, Puzzle } from 'lucide-react';
+import { Settings, Image, Clock, ShieldAlert, Trash2, Plus, Building2, AlertTriangle, Copy, Eye, EyeOff, RefreshCw, Puzzle, Bell, Timer } from 'lucide-react';
 import {
   useTenantSettings,
   useUpdateTenantSettings,
@@ -22,12 +22,16 @@ import {
   useProvisionTenant,
   useWidgetAdminConfig,
   useRotateWidgetIdentitySecret,
+  useNotificationSettings,
+  useUpdateNotificationSettings,
+  useSlaSettings,
+  useUpdateSlaSettings,
 } from '@/hooks/useAdminQueries';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-type Tab = 'general' | 'branding' | 'business-hours' | 'holidays' | 'security' | 'feature-flags' | 'usage-limits' | 'provisioning' | 'widget';
-const TABS: Tab[] = ['general', 'branding', 'business-hours', 'holidays', 'security', 'feature-flags', 'usage-limits', 'provisioning', 'widget'];
+type Tab = 'general' | 'branding' | 'business-hours' | 'holidays' | 'security' | 'feature-flags' | 'usage-limits' | 'notifications' | 'sla' | 'provisioning' | 'widget';
+const TABS: Tab[] = ['general', 'branding', 'business-hours', 'holidays', 'security', 'feature-flags', 'usage-limits', 'notifications', 'sla', 'provisioning', 'widget'];
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -76,6 +80,8 @@ export default function SettingsPage() {
         {activeTab === 'security' && <SecurityTab />}
         {activeTab === 'feature-flags' && <FeatureFlagsTab />}
         {activeTab === 'usage-limits' && <UsageLimitsTab />}
+        {activeTab === 'notifications' && <NotificationsTab />}
+        {activeTab === 'sla' && <SlaTab />}
         {activeTab === 'provisioning' && <ProvisioningTab />}
         {activeTab === 'widget' && <WidgetTab />}
       </div>
@@ -639,6 +645,212 @@ function ProvisioningTab() {
           {provisionMutation.isPending ? 'Provisioning...' : 'Provision Tenant'}
         </button>
       </form>
+    </div>
+  );
+}
+
+function NotificationsTab() {
+  const { data: settings, isLoading } = useNotificationSettings();
+  const updateMutation = useUpdateNotificationSettings();
+  const [form, setForm] = React.useState({
+    emailEnabled: true,
+    smsEnabled: false,
+    pushEnabled: true,
+    inAppEnabled: true,
+    digestFrequency: 'REALTIME' as 'REALTIME' | 'HOURLY' | 'DAILY',
+    quietHoursStart: '',
+    quietHoursEnd: '',
+  });
+
+  React.useEffect(() => {
+    if (!settings) return;
+    setForm({
+      emailEnabled: settings.emailEnabled ?? true,
+      smsEnabled: settings.smsEnabled ?? false,
+      pushEnabled: settings.pushEnabled ?? true,
+      inAppEnabled: settings.inAppEnabled ?? true,
+      digestFrequency: settings.digestFrequency ?? 'REALTIME',
+      quietHoursStart: settings.quietHoursStart ?? '',
+      quietHoursEnd: settings.quietHoursEnd ?? '',
+    });
+  }, [settings]);
+
+  if (isLoading) return <p className="text-xs text-neutral-400 animate-pulse py-8 text-center">Loading...</p>;
+
+  return (
+    <div className="max-w-xl space-y-6 text-xs text-neutral-800">
+      <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5 border-b border-neutral-50 pb-2">
+        <Bell className="h-4 w-4 text-primary-500" />
+        <span>Notification Channels</span>
+      </h2>
+
+      <div className="space-y-3">
+        {([
+          { key: 'emailEnabled', label: 'Email Notifications' },
+          { key: 'smsEnabled', label: 'SMS Notifications' },
+          { key: 'pushEnabled', label: 'Push Notifications' },
+          { key: 'inAppEnabled', label: 'In-App Notifications' },
+        ] as const).map(({ key, label }) => (
+          <div key={key} className="flex items-center justify-between p-3 border border-neutral-100 rounded-lg bg-neutral-50/40">
+            <span className="font-semibold text-neutral-700">{label}</span>
+            <input
+              type="checkbox"
+              checked={form[key]}
+              onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.checked }))}
+              className="h-4 w-4 rounded text-primary-500"
+              aria-label={label}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="notif-digest" className="font-semibold text-neutral-600">Digest Frequency</label>
+        <select
+          id="notif-digest"
+          value={form.digestFrequency}
+          onChange={(e) => setForm((f) => ({ ...f, digestFrequency: e.target.value as typeof form.digestFrequency }))}
+          className="w-full border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="REALTIME">Realtime</option>
+          <option value="HOURLY">Hourly digest</option>
+          <option value="DAILY">Daily digest</option>
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="quiet-start" className="font-semibold text-neutral-600">Quiet Hours Start</label>
+          <input
+            id="quiet-start"
+            type="time"
+            value={form.quietHoursStart}
+            onChange={(e) => setForm((f) => ({ ...f, quietHoursStart: e.target.value }))}
+            className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="quiet-end" className="font-semibold text-neutral-600">Quiet Hours End</label>
+          <input
+            id="quiet-end"
+            type="time"
+            value={form.quietHoursEnd}
+            onChange={(e) => setForm((f) => ({ ...f, quietHoursEnd: e.target.value }))}
+            className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+      </div>
+
+      <button
+        onClick={() => updateMutation.mutate(form)}
+        disabled={updateMutation.isPending}
+        className="bg-neutral-800 hover:bg-neutral-900 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50"
+      >
+        {updateMutation.isPending ? 'Saving...' : 'Save Notification Settings'}
+      </button>
+    </div>
+  );
+}
+
+function SlaTab() {
+  const { data: settings, isLoading } = useSlaSettings();
+  const updateMutation = useUpdateSlaSettings();
+  const [form, setForm] = React.useState({
+    firstResponseSlaMinutes: 60,
+    resolutionSlaMinutes: 480,
+    breachNotificationEnabled: true,
+    breachNotificationMinutesBefore: 15,
+    businessHoursOnly: true,
+  });
+
+  React.useEffect(() => {
+    if (!settings) return;
+    setForm({
+      firstResponseSlaMinutes: settings.firstResponseSlaMinutes ?? 60,
+      resolutionSlaMinutes: settings.resolutionSlaMinutes ?? 480,
+      breachNotificationEnabled: settings.breachNotificationEnabled ?? true,
+      breachNotificationMinutesBefore: settings.breachNotificationMinutesBefore ?? 15,
+      businessHoursOnly: settings.businessHoursOnly ?? true,
+    });
+  }, [settings]);
+
+  if (isLoading) return <p className="text-xs text-neutral-400 animate-pulse py-8 text-center">Loading...</p>;
+
+  return (
+    <div className="max-w-xl space-y-6 text-xs text-neutral-800">
+      <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5 border-b border-neutral-50 pb-2">
+        <Timer className="h-4 w-4 text-warning" />
+        <span>SLA Configuration</span>
+      </h2>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="sla-first-response" className="font-semibold text-neutral-600">First Response (minutes)</label>
+          <input
+            id="sla-first-response"
+            type="number"
+            min={1}
+            value={form.firstResponseSlaMinutes}
+            onChange={(e) => setForm((f) => ({ ...f, firstResponseSlaMinutes: Number(e.target.value) }))}
+            className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="sla-resolution" className="font-semibold text-neutral-600">Resolution (minutes)</label>
+          <input
+            id="sla-resolution"
+            type="number"
+            min={1}
+            value={form.resolutionSlaMinutes}
+            onChange={(e) => setForm((f) => ({ ...f, resolutionSlaMinutes: Number(e.target.value) }))}
+            className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between p-3 border border-neutral-100 rounded-lg bg-neutral-50/40">
+          <span className="font-semibold text-neutral-700">Send breach warning notifications</span>
+          <input
+            type="checkbox"
+            checked={form.breachNotificationEnabled}
+            onChange={(e) => setForm((f) => ({ ...f, breachNotificationEnabled: e.target.checked }))}
+            className="h-4 w-4 rounded text-primary-500"
+            aria-label="Enable breach notifications"
+          />
+        </div>
+        {form.breachNotificationEnabled && (
+          <div className="flex flex-col gap-1.5 pl-4 border-l-2 border-primary-200">
+            <label htmlFor="sla-warn-before" className="font-semibold text-neutral-600">Warn this many minutes before breach</label>
+            <input
+              id="sla-warn-before"
+              type="number"
+              min={1}
+              value={form.breachNotificationMinutesBefore}
+              onChange={(e) => setForm((f) => ({ ...f, breachNotificationMinutesBefore: Number(e.target.value) }))}
+              className="w-32 border border-neutral-200 rounded p-2 bg-white focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+        )}
+        <div className="flex items-center justify-between p-3 border border-neutral-100 rounded-lg bg-neutral-50/40">
+          <span className="font-semibold text-neutral-700">SLA only counts during business hours</span>
+          <input
+            type="checkbox"
+            checked={form.businessHoursOnly}
+            onChange={(e) => setForm((f) => ({ ...f, businessHoursOnly: e.target.checked }))}
+            className="h-4 w-4 rounded text-primary-500"
+            aria-label="Business hours only"
+          />
+        </div>
+      </div>
+
+      <button
+        onClick={() => updateMutation.mutate(form)}
+        disabled={updateMutation.isPending}
+        className="bg-neutral-800 hover:bg-neutral-900 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50"
+      >
+        {updateMutation.isPending ? 'Saving...' : 'Save SLA Settings'}
+      </button>
     </div>
   );
 }

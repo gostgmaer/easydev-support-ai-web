@@ -16,6 +16,7 @@ out/
 # Testing & Logs
 coverage/
 *.log
+.pids/
 
 # Environment Variables (Crucial for Security!)
 .env

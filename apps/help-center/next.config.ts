@@ -37,6 +37,7 @@ const widgetOrigin = originOf(process.env.NEXT_PUBLIC_WIDGET_EMBED_URL, null);
 // ].join('; ');
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   transpilePackages: [
     '@easydev/types',
     '@easydev/utils',

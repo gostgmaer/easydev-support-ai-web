@@ -1,80 +1,312 @@
 'use client';
 
 import React from 'react';
-import { User, Shield, Clock, BarChart3, CheckSquare, Award } from 'lucide-react';
+import { User, Shield, Key, Laptop, Loader2, Check, AlertCircle } from 'lucide-react';
+import {
+  useIamProfile,
+  useUpdateIamProfile,
+  useChangePassword,
+  useIamSessions,
+  useRevokeIamSession,
+} from '../../../hooks/useQueries';
 
 export default function ProfilePage() {
-  // Static robust KPIs aligned to senior agent operations
-  const stats = [
-    { label: 'SLA Compliance Rate', value: '98.4%', icon: Award, color: 'text-success bg-success/15' },
-    { label: 'Resolved Tickets (Mo.)', value: '412', icon: CheckSquare, color: 'text-primary-500 bg-primary-50' },
-    { label: 'Avg. First Response Time', value: '8m 42s', icon: Clock, color: 'text-info bg-info/15' },
-  ];
+  const { data: profile, isLoading: profileLoading } = useIamProfile();
+  const { data: sessions = [], isLoading: sessionsLoading } = useIamSessions();
+  const updateProfile = useUpdateIamProfile();
+  const changePassword = useChangePassword();
+  const revokeSession = useRevokeIamSession();
+
+  const [activeTab, setActiveTab] = React.useState<'profile' | 'security' | 'sessions'>('profile');
+
+  // Profile form
+  const [displayName, setDisplayName] = React.useState('');
+  const [firstName, setFirstName] = React.useState('');
+  const [lastName, setLastName] = React.useState('');
+  const [timezone, setTimezone] = React.useState('');
+  const [profileSaved, setProfileSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!profile) return;
+    setDisplayName(profile.displayName ?? '');
+    setFirstName(profile.firstName ?? '');
+    setLastName(profile.lastName ?? '');
+    setTimezone(profile.timezone ?? '');
+  }, [profile]);
+
+  // Password form
+  const [currentPassword, setCurrentPassword] = React.useState('');
+  const [newPassword, setNewPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [passwordError, setPasswordError] = React.useState('');
+  const [passwordSaved, setPasswordSaved] = React.useState(false);
+
+  function handleSaveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    updateProfile.mutate(
+      { displayName, firstName, lastName, timezone },
+      { onSuccess: () => { setProfileSaved(true); setTimeout(() => setProfileSaved(false), 3000); } },
+    );
+  }
+
+  function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPasswordError('');
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters.');
+      return;
+    }
+    changePassword.mutate(
+      { currentPassword, newPassword },
+      {
+        onSuccess: () => {
+          setCurrentPassword('');
+          setNewPassword('');
+          setConfirmPassword('');
+          setPasswordSaved(true);
+          setTimeout(() => setPasswordSaved(false), 3000);
+        },
+        onError: () => setPasswordError('Failed to change password. Check your current password.'),
+      },
+    );
+  }
+
+  const initials = profile
+    ? (profile.firstName?.[0] ?? profile.displayName?.[0] ?? '?').toUpperCase() +
+      (profile.lastName?.[0] ?? '').toUpperCase()
+    : '??';
+
+  if (profileLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-full bg-neutral-50 p-6 space-y-6 overflow-y-auto" role="region" aria-label="Profile settings page">
-      {/* Profile Header card */}
-      <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-5">
-          <div className="h-16 w-16 rounded-full bg-neutral-200 border-2 border-neutral-300 flex items-center justify-center font-bold text-xl text-neutral-700">
-            JD
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-neutral-900 leading-tight">John Doe</h1>
-            <p className="text-xs text-neutral-500 block mt-1">Role: Senior Support Specialist</p>
-            <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded mt-1.5 border border-primary-100">
-              <Shield className="h-3 w-3" /> Tier 2 Authorization
-            </span>
-          </div>
+    <div className="flex flex-col h-full bg-neutral-50 p-6 space-y-6 overflow-y-auto" role="region" aria-label="Profile settings">
+      {/* Header */}
+      <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs flex items-center gap-5">
+        <div className="h-16 w-16 rounded-full bg-primary-100 border-2 border-primary-200 flex items-center justify-center font-bold text-xl text-primary-700 shrink-0">
+          {initials}
         </div>
-
-        <div className="text-xs text-neutral-500 border-t md:border-t-0 md:border-l border-neutral-100 pt-4 md:pt-0 md:pl-6 space-y-1.5">
-          <span className="font-semibold text-neutral-400 uppercase tracking-wider block text-[10px]">Shift Hours</span>
-          <span className="font-bold text-neutral-800 block">Morning Shift (8:00 AM - 5:00 PM EST)</span>
-          <span className="block">Timezone: UTC-5 (America/New_York)</span>
+        <div>
+          <h1 className="text-base font-bold text-neutral-900">{profile?.displayName ?? 'Your Profile'}</h1>
+          <p className="text-xs text-neutral-500">{profile?.email}</p>
+          <p className="text-[10px] text-neutral-400 mt-0.5">{profile?.timezone ?? 'No timezone set'}</p>
         </div>
       </div>
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {stats.map((stat, idx) => {
-          const Icon = stat.icon;
-          return (
-            <div key={idx} className="bg-white border border-neutral-200 rounded-lg p-5 shadow-xs flex items-center justify-between">
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-neutral-200">
+        {(['profile', 'security', 'sessions'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-xs font-semibold capitalize border-b-2 -mb-px transition-colors ${
+              activeTab === tab
+                ? 'border-primary-600 text-primary-700'
+                : 'border-transparent text-neutral-500 hover:text-neutral-800'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Profile Tab */}
+      {activeTab === 'profile' && (
+        <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs max-w-lg space-y-5">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+            <User className="h-4 w-4" /> Personal Information
+          </h2>
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider block">{stat.label}</span>
-                <span className="text-xl font-extrabold text-neutral-900 mt-2 block">{stat.value}</span>
+                <label htmlFor="p-first" className="block text-[10px] font-semibold text-neutral-600 mb-1">First Name</label>
+                <input
+                  id="p-first"
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="w-full text-xs border border-neutral-200 rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
               </div>
-              <div className={`h-11 w-11 rounded-lg flex items-center justify-center ${stat.color}`}>
-                <Icon className="h-5.5 w-5.5" />
+              <div>
+                <label htmlFor="p-last" className="block text-[10px] font-semibold text-neutral-600 mb-1">Last Name</label>
+                <input
+                  id="p-last"
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="w-full text-xs border border-neutral-200 rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
               </div>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Activity Logs details */}
-      <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs space-y-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
-          <BarChart3 className="h-4.5 w-4.5" />
-          <span>Active Session Metrics</span>
-        </h2>
-
-        <div className="space-y-3.5 text-xs text-neutral-600">
-          <div className="flex justify-between items-center py-2 border-b border-neutral-100">
-            <span>Authentication Token Status</span>
-            <span className="text-success font-semibold">Valid (Expires in 6 hours)</span>
-          </div>
-          <div className="flex justify-between items-center py-2 border-b border-neutral-100">
-            <span>WebSocket Latency</span>
-            <span className="text-neutral-900 font-bold">14 ms</span>
-          </div>
-          <div className="flex justify-between items-center py-2 border-b border-neutral-100">
-            <span>IP Address</span>
-            <span className="text-neutral-900 font-semibold">192.168.1.152</span>
-          </div>
+            <div>
+              <label htmlFor="p-display" className="block text-[10px] font-semibold text-neutral-600 mb-1">Display Name</label>
+              <input
+                id="p-display"
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full text-xs border border-neutral-200 rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="p-timezone" className="block text-[10px] font-semibold text-neutral-600 mb-1">Timezone</label>
+              <input
+                id="p-timezone"
+                type="text"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                placeholder="e.g. America/New_York"
+                className="w-full text-xs border border-neutral-200 rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={updateProfile.isPending}
+                className="text-xs px-4 py-1.5 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {updateProfile.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                Save Changes
+              </button>
+              {profileSaved && (
+                <span className="text-xs text-success flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" /> Saved
+                </span>
+              )}
+            </div>
+            {updateProfile.isError && (
+              <p className="text-[10px] text-danger-600">Failed to update profile. Please try again.</p>
+            )}
+          </form>
         </div>
-      </div>
+      )}
+
+      {/* Security Tab */}
+      {activeTab === 'security' && (
+        <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs max-w-lg space-y-5">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+            <Key className="h-4 w-4" /> Change Password
+          </h2>
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div>
+              <label htmlFor="pw-current" className="block text-[10px] font-semibold text-neutral-600 mb-1">Current Password</label>
+              <input
+                id="pw-current"
+                type="password"
+                required
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full text-xs border border-neutral-200 rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="pw-new" className="block text-[10px] font-semibold text-neutral-600 mb-1">New Password</label>
+              <input
+                id="pw-new"
+                type="password"
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full text-xs border border-neutral-200 rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="pw-confirm" className="block text-[10px] font-semibold text-neutral-600 mb-1">Confirm New Password</label>
+              <input
+                id="pw-confirm"
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full text-xs border border-neutral-200 rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            {passwordError && (
+              <p className="text-[10px] text-danger-600 flex items-center gap-1">
+                <AlertCircle className="h-3.5 w-3.5" /> {passwordError}
+              </p>
+            )}
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={changePassword.isPending}
+                className="text-xs px-4 py-1.5 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {changePassword.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                Change Password
+              </button>
+              {passwordSaved && (
+                <span className="text-xs text-success flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" /> Password updated
+                </span>
+              )}
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Sessions Tab */}
+      {activeTab === 'sessions' && (
+        <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs space-y-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+            <Laptop className="h-4 w-4" /> Active Sessions
+          </h2>
+          {sessionsLoading ? (
+            <p className="text-xs text-neutral-400">Loading sessions…</p>
+          ) : sessions.length === 0 ? (
+            <p className="text-xs text-neutral-400 italic">No active sessions found.</p>
+          ) : (
+            <div className="space-y-2">
+              {sessions.map((session) => (
+                <div
+                  key={session.id}
+                  className={`flex items-center justify-between p-3 rounded-lg border ${
+                    session.isCurrent
+                      ? 'border-primary-200 bg-primary-50/40'
+                      : 'border-neutral-100 bg-neutral-50/40'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-semibold text-neutral-800 flex items-center gap-1.5">
+                      {session.isCurrent && (
+                        <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded bg-primary-100 text-primary-700">
+                          Current
+                        </span>
+                      )}
+                      {session.ipAddress}
+                    </p>
+                    <p className="text-[10px] text-neutral-400 truncate max-w-xs">{session.userAgent}</p>
+                    <p className="text-[10px] text-neutral-400">
+                      Last active: {new Date(session.lastActiveAt).toLocaleString()}
+                    </p>
+                  </div>
+                  {!session.isCurrent && (
+                    <button
+                      onClick={() => {
+                        if (confirm('Revoke this session?')) revokeSession.mutate(session.id);
+                      }}
+                      disabled={revokeSession.isPending}
+                      className="text-[10px] font-semibold text-danger-600 hover:text-danger-800 px-2 py-1 rounded hover:bg-danger-50 disabled:opacity-50"
+                    >
+                      Revoke
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
