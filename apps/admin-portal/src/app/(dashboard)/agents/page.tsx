@@ -1,12 +1,36 @@
 'use client';
 
 import * as React from 'react';
-import { Globe, Gauge } from 'lucide-react';
-import { useAgentProfiles } from '../../../hooks/useAdminQueries';
+import { Globe, Gauge, UserPlus } from 'lucide-react';
+import { useAgentProfiles, useCreateAgentProfile } from '../../../hooks/useAdminQueries';
 
 export default function AgentsPage() {
   const [search, setSearch] = React.useState('');
   const { data: agents, isLoading, isError } = useAgentProfiles(search || undefined);
+  const createAgentMutation = useCreateAgentProfile();
+
+  const [isCreating, setIsCreating] = React.useState(false);
+  const [newDisplayName, setNewDisplayName] = React.useState('');
+  const [newEmployeeCode, setNewEmployeeCode] = React.useState('');
+
+  const handleCreateAgent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDisplayName.trim()) return;
+    createAgentMutation.mutate(
+      {
+        userId: crypto.randomUUID(), // Mocking an IAM user ID for demo purposes
+        displayName: newDisplayName.trim(),
+        employeeCode: newEmployeeCode.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setIsCreating(false);
+          setNewDisplayName('');
+          setNewEmployeeCode('');
+        },
+      }
+    );
+  };
 
   return (
     <div className="space-y-6" role="region" aria-label="Support Agents List">
@@ -16,18 +40,74 @@ export default function AgentsPage() {
           <h1 className="text-base font-bold text-neutral-900">Support Agents</h1>
           <p className="text-xs text-neutral-500">Agent profiles, capacity limits, and account status across the tenant.</p>
         </div>
-        <div className="relative">
-          <label htmlFor="agent-search-input" className="sr-only">Search agents</label>
-          <input
-            id="agent-search-input"
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search agents..."
-            className="text-xs rounded border border-neutral-200 px-3 py-2 bg-white text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500 w-60"
-          />
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <label htmlFor="agent-search-input" className="sr-only">Search agents</label>
+            <input
+              id="agent-search-input"
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search agents..."
+              className="text-xs rounded border border-neutral-200 px-3 py-2 bg-white text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500 w-60"
+            />
+          </div>
+          <button
+            onClick={() => setIsCreating(!isCreating)}
+            className="flex items-center gap-2 bg-primary-600 text-white px-3 py-2 rounded text-xs font-medium hover:bg-primary-700 transition-colors"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Agent
+          </button>
         </div>
       </div>
+
+      {isCreating && (
+        <form onSubmit={handleCreateAgent} className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs space-y-4">
+          <h2 className="text-sm font-bold text-neutral-900">Create New Agent Profile</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label htmlFor="displayName" className="block text-xs font-semibold text-neutral-700">Display Name</label>
+              <input
+                id="displayName"
+                type="text"
+                value={newDisplayName}
+                onChange={(e) => setNewDisplayName(e.target.value)}
+                placeholder="e.g. John Doe"
+                className="w-full text-xs rounded border border-neutral-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="employeeCode" className="block text-xs font-semibold text-neutral-700">Employee Code (Optional)</label>
+              <input
+                id="employeeCode"
+                type="text"
+                value={newEmployeeCode}
+                onChange={(e) => setNewEmployeeCode(e.target.value)}
+                placeholder="e.g. EMP-1234"
+                className="w-full text-xs rounded border border-neutral-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsCreating(false)}
+              className="px-4 py-2 text-xs font-medium text-neutral-600 hover:text-neutral-900 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createAgentMutation.isPending || !newDisplayName.trim()}
+              className="bg-neutral-900 text-white px-4 py-2 rounded text-xs font-medium hover:bg-neutral-800 transition-colors disabled:opacity-50"
+            >
+              {createAgentMutation.isPending ? 'Creating...' : 'Create Agent'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {isLoading && <p className="text-xs text-neutral-400">Loading agents...</p>}
       {isError && <p className="text-xs text-danger-600">Failed to load agent profiles.</p>}

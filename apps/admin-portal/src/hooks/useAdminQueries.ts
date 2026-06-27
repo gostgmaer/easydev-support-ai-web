@@ -559,6 +559,20 @@ export function useAgentProfiles(search?: string) {
   });
 }
 
+export function useCreateAgentProfile() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (variables: { userId: string; displayName: string; employeeCode?: string; timezone?: string }) => {
+      return apiClient.post<AgentProfile>('/v1/agents', variables);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'agent-profiles'] });
+    },
+  });
+}
+
 export function useAddTeamAgent() {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
