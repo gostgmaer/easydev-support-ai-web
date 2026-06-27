@@ -519,6 +519,37 @@ export function useCreateTicket() {
   });
 }
 
+export function useSplitTicket() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      ticketId,
+      messageIds,
+      newSubject,
+      targetTeamId,
+    }: {
+      ticketId: string;
+      messageIds: string[];
+      newSubject?: string;
+      targetTeamId?: string;
+    }) => {
+      return normalizeTicket(
+        await api.post<Record<string, unknown>>(`/v1/tickets/${ticketId}/split`, {
+          messageIds,
+          newSubject,
+          targetTeamId,
+        }),
+      );
+    },
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
+      queryClient.invalidateQueries({ queryKey: ['inbox'] });
+    },
+  });
+}
+
 export function useConversationTags(conversationId: string | null) {
   const api = useApiClient();
   return useQuery<string[]>({

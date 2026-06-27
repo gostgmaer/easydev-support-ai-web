@@ -45,10 +45,15 @@ export default function AgentsPage() {
                       <div className="h-9 w-9 rounded-full bg-neutral-100 flex items-center justify-center font-bold text-sm text-neutral-700">
                         {agent.displayName.substring(0, 2).toUpperCase()}
                       </div>
-                      <div className="min-w-0">
-                        <h2 className="text-xs font-bold text-neutral-900 truncate">{agent.displayName}</h2>
+                      <div className="min-w-0 flex flex-col gap-1 items-start">
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-xs font-bold text-neutral-900 truncate">{agent.displayName}</h2>
+                          {agent.displayName === 'General Support AI' && (
+                            <span className="bg-primary-100 text-primary-800 text-[10px] font-bold px-1.5 py-0.5 rounded">Default AI</span>
+                          )}
+                        </div>
                         {agent.employeeCode && (
-                          <span className="text-[10px] text-neutral-400 block mt-0.5">{agent.employeeCode}</span>
+                          <span className="text-[10px] text-neutral-400 block">{agent.employeeCode}</span>
                         )}
                       </div>
                     </div>

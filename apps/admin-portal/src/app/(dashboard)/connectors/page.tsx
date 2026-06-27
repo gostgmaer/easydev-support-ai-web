@@ -501,9 +501,14 @@ export default function ConnectorsPage() {
                         <div className="h-9 w-9 bg-primary-50 text-primary-600 rounded-md flex items-center justify-center border border-primary-100">
                           <Database className="h-5 w-5" />
                         </div>
-                        <div>
-                          <span className="font-bold text-xs text-neutral-800 block">{item.name}</span>
-                          <span className={`text-[10px] block mt-0.5 ${HEALTH_TONE[item.healthStatus]}`}>
+                        <div className="flex flex-col items-start gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs text-neutral-800 block">{item.name}</span>
+                            {item.name === 'Webchat Widget' && (
+                              <span className="bg-primary-100 text-primary-800 text-[10px] font-bold px-1.5 py-0.5 rounded">Default</span>
+                            )}
+                          </div>
+                          <span className={`text-[10px] block ${HEALTH_TONE[item.healthStatus]}`}>
                             {item.connectorType} • {item.healthStatus.toLowerCase()}
                           </span>
                         </div>
