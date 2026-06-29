@@ -95,5 +95,10 @@ export function normalizeTicket(raw: Record<string, unknown>): Ticket {
     ...(raw as unknown as Ticket),
     status: normalizeTicketStatus(String(raw.status ?? '')),
     priority: normalizePriority(String(raw.priority ?? '')),
+    tags: (raw.tags as any) || [],
+    watchers: (raw.watchers as any) || [],
+    comments: (raw.comments as any) || [],
+    approvals: (raw.approvals as any) || [],
+    relatedTickets: (raw.relatedTickets as any) || [],
   };
 }

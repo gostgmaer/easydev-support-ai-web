@@ -4,7 +4,7 @@ import { TicketSidebar, AuditTimeline, Section, type TimelineEntry } from '@easy
 import { Can } from '@easydev/permissions';
 import { useAuth } from '@easydev/auth';
 import { TicketApproval, ConversationPriority } from '../types';
-import { useTicketByConversation, useUpdateTicket, useCreateTicket, useAddTicketComment, useTicketLifecycleAction, useDecideTicketApproval, useAssignTicket } from '../hooks/useQueries';
+import { useTicketByConversation, useUpdateTicket, useCreateTicket, useAddTicketComment, useTicketLifecycleAction, useDecideTicketApproval, useAssignTicket, useAddTicketTag, useRemoveTicketTag, useAddTicketWatcher, useRemoveTicketWatcher } from '../hooks/useQueries';
 import { useInboxStore } from '../store/inboxStore';
 import { toTicketDetails } from '../lib/ui-adapters';
 
@@ -25,7 +25,13 @@ export function TicketPanel() {
   const lifecycleMutation = useTicketLifecycleAction();
   const decideApprovalMutation = useDecideTicketApproval();
   const assignMutation = useAssignTicket();
+  const addTagMutation = useAddTicketTag();
+  const removeTagMutation = useRemoveTicketTag();
+  const addWatcherMutation = useAddTicketWatcher();
+  const removeWatcherMutation = useRemoveTicketWatcher();
   const { user } = useAuth();
+
+  const [tagInput, setTagInput] = useState('');
 
   const { data: ticket, isLoading } = useTicketByConversation(activeConversationId);
   const [commentText, setCommentText] = useState('');
@@ -87,7 +93,16 @@ export function TicketPanel() {
   };
 
   const handleStatusChange = (status: Ticket['status']) => {
-    updateTicketMutation.mutate({ ticketId: ticket.id, updates: { status } });
+    if (status === 'solved') {
+      const summary = window.prompt("Enter a resolution summary (optional):") ?? undefined;
+      lifecycleMutation.mutate({ 
+        ticketId: ticket.id, 
+        action: 'resolve', 
+        payload: { resolutionSummary: summary } 
+      });
+    } else {
+      updateTicketMutation.mutate({ ticketId: ticket.id, updates: { status } });
+    }
   };
 
   const handleEscalationToggle = () => {
@@ -208,7 +223,70 @@ export function TicketPanel() {
             )}
           </div>
         )}
+
+        {user && (
+          <div className="flex items-center justify-between pt-2 border-t border-neutral-100">
+            <span className="font-semibold text-neutral-600">Watchers</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold bg-neutral-100 px-1.5 py-0.5 rounded text-neutral-600">
+                {ticket.watchers.length} watching
+              </span>
+              {ticket.watchers.some(w => w.userId === user.id) ? (
+                <button
+                  onClick={() => removeWatcherMutation.mutate({ ticketId: ticket.id, userId: user.id })}
+                  disabled={removeWatcherMutation.isPending}
+                  className="text-[10px] font-bold text-danger hover:underline disabled:opacity-50"
+                >
+                  Unwatch
+                </button>
+              ) : (
+                <button
+                  onClick={() => addWatcherMutation.mutate({ ticketId: ticket.id, userId: user.id })}
+                  disabled={addWatcherMutation.isPending}
+                  className="text-[10px] font-bold text-primary-600 hover:underline disabled:opacity-50"
+                >
+                  Watch
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      <Section title="Tags" className="p-4">
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {ticket.tags.map((t) => (
+            <span key={t.id} className="flex items-center gap-1 rounded bg-primary-50 px-2 py-0.5 text-[10px] font-semibold text-primary-700">
+              {t.tag}
+              <button
+                onClick={() => removeTagMutation.mutate({ ticketId: ticket.id, tag: t.tag })}
+                className="text-primary-400 hover:text-danger"
+              >
+                <XCircle className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          {ticket.tags.length === 0 && <span className="text-xs italic text-neutral-400">No tags added.</span>}
+        </div>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          if (tagInput.trim()) {
+            addTagMutation.mutate({ ticketId: ticket.id, tag: tagInput.trim() });
+            setTagInput('');
+          }
+        }} className="flex gap-2">
+          <input
+            type="text"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            placeholder="Add a tag..."
+            className="flex-1 rounded border border-neutral-200 px-2 py-1 text-xs focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          />
+          <button type="submit" disabled={!tagInput.trim() || addTagMutation.isPending} className="rounded bg-neutral-100 px-3 py-1 text-xs font-semibold hover:bg-neutral-200 disabled:opacity-50">
+            Add
+          </button>
+        </form>
+      </Section>
 
       <Section title="Required approvals" className="p-4">
         {ticket.approvals.length > 0 ? (
