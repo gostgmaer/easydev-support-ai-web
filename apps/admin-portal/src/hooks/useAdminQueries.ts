@@ -565,6 +565,15 @@ export function useAgentProfiles(search?: string) {
   });
 }
 
+export function useProvisionAgentUser() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: async (variables: { email: string; password?: string; name: string }) => {
+      return apiClient.post<{ id: string }>('/v1/iam/auth/provision', variables);
+    },
+  });
+}
+
 export function useCreateAgentProfile() {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
