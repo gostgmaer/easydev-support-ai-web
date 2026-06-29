@@ -22,6 +22,16 @@ interface InboxPage {
   nextCursor?: string;
 }
 
+export function useTeams() {
+  const api = useApiClient();
+  return useQuery<{ id: string; name: string }[]>({
+    queryKey: ['teams'],
+    queryFn: async () => {
+      return api.get<{ id: string; name: string }[]>('/v1/teams');
+    },
+  });
+}
+
 // 1. UNIFIED INBOX (real backend surface is /v1/inbox/*, not a generic /v1/conversations list)
 export function useConversations(view: InboxView, filters: InboxFilters, teamId?: string | null) {
   const api = useApiClient();
@@ -1325,3 +1335,22 @@ export function useArchiveConversation() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
   });
 }
+
+export function useAddTicketTag() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketId, tag }: { ticketId: string; tag: string }) => api.post(`/v1/tickets/${ticketId}/tags`, { tag }),
+    onSettled: (_, __, { ticketId }) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] })
+  });
+}
+
+export function useRemoveTicketTag() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketId, tag }: { ticketId: string; tag: string }) => api.delete(`/v1/tickets/${ticketId}/tags/${tag}`),
+    onSettled: (_, __, { ticketId }) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] })
+  });
+}
+

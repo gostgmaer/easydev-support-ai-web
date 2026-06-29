@@ -3,8 +3,8 @@ import { CheckCircle2, Link2, XCircle } from 'lucide-react';
 import { TicketSidebar, AuditTimeline, Section, type TimelineEntry } from '@easydev/ui';
 import { Can } from '@easydev/permissions';
 import { useAuth } from '@easydev/auth';
-import { TicketApproval, ConversationPriority } from '../types';
-import { useTicketByConversation, useUpdateTicket, useCreateTicket, useAddTicketComment, useTicketLifecycleAction, useDecideTicketApproval, useAssignTicket, useAddTicketTag, useRemoveTicketTag, useAddTicketWatcher, useRemoveTicketWatcher } from '../hooks/useQueries';
+import { TicketApproval, ConversationPriority, Ticket } from '../types';
+import { useTicketByConversation, useUpdateTicket, useCreateTicket, useAddTicketComment, useTicketLifecycleAction, useDecideTicketApproval, useAssignTicket, useTransferTicket, useTeams, useAddTicketTag, useRemoveTicketTag, useAddTicketWatcher, useRemoveTicketWatcher } from '../hooks/useQueries';
 import { useInboxStore } from '../store/inboxStore';
 import { toTicketDetails } from '../lib/ui-adapters';
 
@@ -15,6 +15,11 @@ const SLA_COLORS: Record<string, string> = {
 };
 
 export function TicketPanel() {
+  const [isTransferModalOpen, setIsTransferModalOpen] = React.useState(false);
+  const [transferTargetTeam, setTransferTargetTeam] = React.useState<string>('');
+  const [transferNote, setTransferNote] = React.useState<string>('');
+  const { data: teamsData } = useTeams();
+
   const activeConversationId = useInboxStore((state) => state.activeConversationId);
   const activeConversation = useInboxStore((state) =>
     state.conversations.find((c) => c.id === state.activeConversationId),
@@ -25,6 +30,7 @@ export function TicketPanel() {
   const lifecycleMutation = useTicketLifecycleAction();
   const decideApprovalMutation = useDecideTicketApproval();
   const assignMutation = useAssignTicket();
+  const transferMutation = useTransferTicket();
   const addTagMutation = useAddTicketTag();
   const removeTagMutation = useRemoveTicketTag();
   const addWatcherMutation = useAddTicketWatcher();
@@ -84,6 +90,7 @@ export function TicketPanel() {
             {createTicketMutation.isPending ? 'Creating…' : 'Create New Ticket'}
           </button>
         )}
+
       </div>
     );
   }
@@ -175,8 +182,8 @@ export function TicketPanel() {
         </div>
 
         <div className="flex items-center justify-between">
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${SLA_COLORS[ticket.slaStatus]}`}>
-            SLA: {ticket.slaStatus.replace('_', ' ')}
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${ticket.slaStatus ? SLA_COLORS[ticket.slaStatus] : 'bg-neutral-100 text-neutral-600 border-neutral-200'}`}>
+            SLA: {ticket.slaStatus ? ticket.slaStatus.replace('_', ' ') : 'N/A'}
           </span>
           <div className="flex flex-col items-end gap-2">
             <Can resource="ticket" action="update">
@@ -208,19 +215,29 @@ export function TicketPanel() {
         {user && (
           <div className="flex items-center justify-between pt-2 border-t border-neutral-100">
             <span className="font-semibold text-neutral-600">Assigned Agent</span>
-            {ticket.assignedAgentId ? (
-              <span className="font-bold text-neutral-900">{ticket.assignedAgentId === user.id ? 'You' : ticket.assignedAgentId}</span>
-            ) : (
+            <div className="flex items-center gap-2">
+              {ticket.assignedAgentId ? (
+                <span className="font-bold text-neutral-900">{ticket.assignedAgentId === user.id ? 'You' : ticket.assignedAgentId}</span>
+              ) : (
+                <Can resource="ticket" action="assign">
+                  <button
+                    onClick={() => assignMutation.mutate({ ticketId: ticket.id, agentProfileId: user.id })}
+                    disabled={assignMutation.isPending}
+                    className="text-[10px] font-bold text-primary-600 hover:underline disabled:opacity-50"
+                  >
+                    {assignMutation.isPending ? 'Claiming...' : 'Claim Ticket'}
+                  </button>
+                </Can>
+              )}
               <Can resource="ticket" action="assign">
                 <button
-                  onClick={() => assignMutation.mutate({ ticketId: ticket.id, agentProfileId: user.id })}
-                  disabled={assignMutation.isPending}
-                  className="text-[10px] font-bold text-primary-600 hover:underline disabled:opacity-50"
+                  onClick={() => setIsTransferModalOpen(true)}
+                  className="text-[10px] font-bold text-neutral-500 hover:text-neutral-900 border border-neutral-200 px-1.5 py-0.5 rounded"
                 >
-                  {assignMutation.isPending ? 'Claiming...' : 'Claim Ticket'}
+                  Transfer
                 </button>
               </Can>
-            )}
+            </div>
           </div>
         )}
 
@@ -363,6 +380,75 @@ export function TicketPanel() {
           <p className="text-xs italic text-neutral-400">No activity yet.</p>
         )}
       </Section>
+      {/* Transfer Modal */}
+      {isTransferModalOpen && ticket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-96 rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-sm font-bold text-neutral-900">Transfer Ticket</h3>
+            
+            <div className="mb-4 space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-neutral-600">Target Team</label>
+                <select
+                  value={transferTargetTeam}
+                  onChange={(e) => setTransferTargetTeam(e.target.value)}
+                  className="w-full rounded border border-neutral-300 p-2 text-xs focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  <option value="">Select a team...</option>
+                  {teamsData?.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-neutral-600">Transfer Note (Optional)</label>
+                <textarea
+                  value={transferNote}
+                  onChange={(e) => setTransferNote(e.target.value)}
+                  placeholder="Why is this ticket being transferred?"
+                  rows={3}
+                  className="w-full rounded border border-neutral-300 p-2 text-xs focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIsTransferModalOpen(false);
+                  setTransferTargetTeam('');
+                  setTransferNote('');
+                }}
+                className="rounded border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!transferTargetTeam) return;
+                  transferMutation.mutate(
+                    { ticketId: ticket.id, toTeamId: transferTargetTeam, note: transferNote },
+                    {
+                      onSuccess: () => {
+                        setIsTransferModalOpen(false);
+                        setTransferTargetTeam('');
+                        setTransferNote('');
+                      },
+                    }
+                  );
+                }}
+                disabled={!transferTargetTeam || transferMutation.isPending}
+                className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+              >
+                {transferMutation.isPending ? 'Transferring...' : 'Transfer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
