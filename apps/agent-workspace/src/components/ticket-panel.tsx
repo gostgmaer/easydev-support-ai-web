@@ -92,7 +92,19 @@ export function TicketPanel() {
 
   const handleEscalationToggle = () => {
     if (!ticket.escalated) {
-      lifecycleMutation.mutate({ ticketId: ticket.id, action: 'escalate' });
+      lifecycleMutation.mutate({ 
+        ticketId: ticket.id, 
+        action: 'escalate', 
+        payload: { reason: 'Escalated by agent via workspace toggle' } 
+      });
+    }
+  };
+
+  const handleSlaPauseToggle = () => {
+    if (ticket.status === 'pending') {
+      lifecycleMutation.mutate({ ticketId: ticket.id, action: 'resume-sla' });
+    } else {
+      lifecycleMutation.mutate({ ticketId: ticket.id, action: 'pending' });
     }
   };
 
@@ -151,19 +163,31 @@ export function TicketPanel() {
           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${SLA_COLORS[ticket.slaStatus]}`}>
             SLA: {ticket.slaStatus.replace('_', ' ')}
           </span>
-          <Can resource="ticket" action="update">
-            <label htmlFor="ticket-escalated" className={`flex items-center gap-1 font-semibold ${ticket.escalated ? 'text-danger' : 'text-neutral-600'}`}>
-              <span>{ticket.escalated ? 'Escalated to Tier 2' : 'Escalate to Tier 2'}</span>
-              <input
-                id="ticket-escalated"
-                type="checkbox"
-                checked={ticket.escalated}
-                onChange={handleEscalationToggle}
-                disabled={ticket.escalated || lifecycleMutation.isPending}
-                className="h-4 w-4 cursor-pointer rounded border-neutral-300 text-danger focus:ring-danger disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-            </label>
-          </Can>
+          <div className="flex flex-col items-end gap-2">
+            <Can resource="ticket" action="update">
+              <label htmlFor="ticket-escalated" className={`flex items-center gap-1 font-semibold ${ticket.escalated ? 'text-danger' : 'text-neutral-600'}`}>
+                <span>{ticket.escalated ? 'Escalated to Tier 2' : 'Escalate to Tier 2'}</span>
+                <input
+                  id="ticket-escalated"
+                  type="checkbox"
+                  checked={ticket.escalated}
+                  onChange={handleEscalationToggle}
+                  disabled={ticket.escalated || lifecycleMutation.isPending}
+                  className="h-4 w-4 cursor-pointer rounded border-neutral-300 text-danger focus:ring-danger disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+              </label>
+            </Can>
+
+            <Can resource="ticket" action="update">
+              <button
+                onClick={handleSlaPauseToggle}
+                disabled={lifecycleMutation.isPending || ticket.status === 'closed' || ticket.status === 'solved'}
+                className="text-[10px] font-bold text-primary-600 hover:underline disabled:opacity-50"
+              >
+                {ticket.status === 'pending' ? 'Resume SLA' : 'Wait for Customer (Pause SLA)'}
+              </button>
+            </Can>
+          </div>
         </div>
 
         {user && (

@@ -943,7 +943,7 @@ export function useTicketLifecycleAction() {
       payload,
     }: {
       ticketId: string;
-      action: 'start' | 'resolve' | 'close' | 'reopen' | 'escalate';
+      action: 'start' | 'resolve' | 'close' | 'reopen' | 'escalate' | 'pending' | 'resume-sla';
       payload?: Record<string, unknown>;
     }) => {
       return api.post<{ success: boolean }>(`/v1/tickets/${ticketId}/${action}`, payload ?? {});
@@ -955,6 +955,8 @@ export function useTicketLifecycleAction() {
         close: 'closed',
         reopen: 'open',
         escalate: 'escalated',
+        pending: 'pending',
+        'resume-sla': 'in_progress',
       };
       if (statusMap[action]) updateTicketState(ticketId, { status: statusMap[action] as any });
     },
