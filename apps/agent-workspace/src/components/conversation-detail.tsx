@@ -176,12 +176,12 @@ export function ConversationDetail({ showOpenLink = false }: ConversationDetailP
               <AiPanel />
             </TabsContent>
             <TabsContent value="knowledge">
-              <FeatureFlagGate flag="knowledge_base.enabled">
+              <FeatureFlagGate flag="knowledge_base.enabled" is={true} requiredPermission="read">
                 <KnowledgePanel />
               </FeatureFlagGate>
             </TabsContent>
             <TabsContent value="workflow">
-              <FeatureFlagGate flag="workflow_orchestration.enabled">
+              <FeatureFlagGate flag="workflow_orchestration.enabled" is={true} requiredPermission="read">
                 <WorkflowPanel />
               </FeatureFlagGate>
             </TabsContent>

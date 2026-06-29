@@ -117,7 +117,7 @@ export function toTicketDetails(ticket: Ticket): TicketDetails {
     status: TICKET_STATUS_TO_UI[ticket.status],
     priority: PRIORITY_TO_UI[ticket.priority],
     // No agent directory lookup is wired yet - falls back to showing the raw id as the name.
-    assigneeName: ticket.assigneeId,
+    assigneeName: ticket.assignedAgentId,
     tags: [],
   };
 }
