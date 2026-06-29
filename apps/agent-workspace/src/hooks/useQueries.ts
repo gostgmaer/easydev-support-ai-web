@@ -1131,7 +1131,7 @@ export function useRemoveMessageReaction() {
       messageId: string;
       conversationId: string;
       emoji: string;
-    }) => api.delete<void>(`/v1/messages/${messageId}/reactions`, { body: { emoji } }),
+    }) => api.delete<void>(`/v1/messages/${messageId}/reactions`, { body: { emoji } } as any),
     onSuccess: (_, { conversationId }) =>
       queryClient.invalidateQueries({ queryKey: ['messages', conversationId] }),
   });
