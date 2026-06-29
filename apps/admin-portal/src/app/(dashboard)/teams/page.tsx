@@ -98,8 +98,12 @@ function TeamMembersPanel({ team }: { team: Team }) {
 
       {isAgentsLoading ? (
         <p className="text-neutral-400">Loading agents...</p>
+      ) : agentProfiles.length === 0 ? (
+        <p className="text-neutral-400 italic">
+          No agent profiles exist. <a href="/agents" className="text-primary-600 hover:underline">Create an agent first</a>.
+        </p>
       ) : availableAgents.length === 0 ? (
-        <p className="text-neutral-400 italic">All agent profiles are already on this team.</p>
+        <p className="text-neutral-400 italic">All available agents are already on this team.</p>
       ) : (
         <form onSubmit={handleAddMember} className="flex items-end gap-2 pt-2 border-t border-neutral-100">
           <div className="flex flex-col gap-1 flex-1">
@@ -253,9 +257,14 @@ export default function TeamsPage() {
                       <div className="h-9 w-9 bg-primary-50 text-primary-600 rounded-md flex items-center justify-center">
                         <Users className="h-5 w-5" />
                       </div>
-                      <div>
-                        <h2 className="text-sm font-bold text-neutral-900">{team.name}</h2>
-                        <span className="text-[10px] text-neutral-400 block mt-0.5">{team.members.length} active members</span>
+                      <div className="flex flex-col items-start gap-1">
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-sm font-bold text-neutral-900">{team.name}</h2>
+                          {team.name === 'General Support' && (
+                            <span className="bg-primary-100 text-primary-800 text-[10px] font-bold px-1.5 py-0.5 rounded">Default</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-neutral-400 block">{team.members.length} active members</span>
                       </div>
                     </div>
 

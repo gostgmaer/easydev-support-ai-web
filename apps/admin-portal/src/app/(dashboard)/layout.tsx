@@ -21,7 +21,9 @@ import {
   Key,
   Webhook,
   Activity,
-  User
+  User,
+  UserSquare2,
+  Tags,
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -49,7 +51,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navigationItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Analytics & Reports', href: '/analytics', icon: BarChart3 },
-    { label: 'Teams & Agents', href: '/teams', icon: Users },
+    { label: 'Agents', href: '/agents', icon: User },
+    { label: 'Teams', href: '/teams', icon: Users },
+    { label: 'Customers', href: '/customers', icon: UserSquare2 },
+    { label: 'Ticket Categories', href: '/ticket-categories', icon: Tags },
     { label: 'Channels', href: '/channels', icon: Radio },
     { label: 'Connectors', href: '/connectors', icon: Database },
     { label: 'Knowledge Base', href: '/knowledge', icon: ShieldCheck },

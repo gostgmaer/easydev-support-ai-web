@@ -12,6 +12,7 @@ import {
   useConfigureConnectorOAuth,
   useConnectorExecutions,
   useRetryConnectorExecution,
+  useConnectorWebhooks,
 } from '@/hooks/useAdminQueries';
 import type { Connector } from '@/store/adminStore';
 
@@ -400,6 +401,37 @@ function ExecutionHistory({ connectorId }: { connectorId: string }) {
   );
 }
 
+function ConnectorWebhooks({ connectorId }: { connectorId: string }) {
+  const { data: webhooks = [], isLoading } = useConnectorWebhooks(connectorId);
+
+  return (
+    <div className="mt-3 border-t border-neutral-200 pt-3 text-xs space-y-2">
+      <h3 className="font-bold text-neutral-600">Registered Webhooks</h3>
+      {isLoading ? (
+        <p className="text-neutral-400">Loading webhooks...</p>
+      ) : webhooks.length === 0 ? (
+        <p className="text-neutral-400">No webhooks registered for this connector.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {webhooks.map((webhook: any) => (
+            <li key={webhook.id} className="flex flex-col gap-1 p-2 border border-neutral-200 rounded bg-white">
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-neutral-800">{webhook.url || webhook.endpoint}</span>
+                <span className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${webhook.status === 'ACTIVE' ? 'text-success bg-success/15' : 'text-neutral-500 bg-neutral-100'}`}>
+                  {webhook.status || 'UNKNOWN'}
+                </span>
+              </div>
+              {webhook.events && webhook.events.length > 0 && (
+                <span className="text-[10px] text-neutral-500">Events: {webhook.events.join(', ')}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function ConnectorsPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -501,9 +533,14 @@ export default function ConnectorsPage() {
                         <div className="h-9 w-9 bg-primary-50 text-primary-600 rounded-md flex items-center justify-center border border-primary-100">
                           <Database className="h-5 w-5" />
                         </div>
-                        <div>
-                          <span className="font-bold text-xs text-neutral-800 block">{item.name}</span>
-                          <span className={`text-[10px] block mt-0.5 ${HEALTH_TONE[item.healthStatus]}`}>
+                        <div className="flex flex-col items-start gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs text-neutral-800 block">{item.name}</span>
+                            {item.name === 'Webchat Widget' && (
+                              <span className="bg-primary-100 text-primary-800 text-[10px] font-bold px-1.5 py-0.5 rounded">Default</span>
+                            )}
+                          </div>
+                          <span className={`text-[10px] block ${HEALTH_TONE[item.healthStatus]}`}>
                             {item.connectorType} • {item.healthStatus.toLowerCase()}
                           </span>
                         </div>
@@ -542,6 +579,7 @@ export default function ConnectorsPage() {
                     {expandedConnectorId === item.id && (
                       <>
                         <ConfigureConnectorForm connector={item} />
+                        <ConnectorWebhooks connectorId={item.id} />
                         <ExecutionHistory connectorId={item.id} />
                       </>
                     )}

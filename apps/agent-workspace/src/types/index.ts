@@ -101,18 +101,32 @@ export interface TicketComment {
   createdAt: string;
 }
 
+export interface TicketTag {
+  id: string;
+  tag: string;
+}
+
+export interface TicketWatcher {
+  id: string;
+  userId: string;
+}
+
 export interface Ticket {
   id: string;
   conversationId: string;
   subject: string;
   status: TicketStatus;
   priority: ConversationPriority;
-  assigneeId?: string;
+  assignedAgentId?: string;
+  assignedTeamId?: string;
   slaStatus: 'on_time' | 'at_risk' | 'breached';
   escalated: boolean;
   comments: TicketComment[];
   approvals: TicketApproval[];
   relatedTickets: string[]; // NCT IDs
+  tags: TicketTag[];
+  watchers: TicketWatcher[];
+  resolutionSummary?: string;
 }
 
 export interface Notification {

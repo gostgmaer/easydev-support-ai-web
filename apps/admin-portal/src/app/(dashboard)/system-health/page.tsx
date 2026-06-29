@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Activity, AlertTriangle, Server, Cpu } from 'lucide-react';
-import { useIncidentsAlerts, useResolveIncident, useQueueStats, useSystemHealthChecks, useAuditLog } from '@/hooks/useAdminQueries';
+import { useIncidentsAlerts, useResolveIncident, useQueueStats, useSystemHealthChecks, useAuditLog, useHardeningCost, useReplayOutbox } from '@/hooks/useAdminQueries';
 
 export default function SystemHealthPage() {
   const router = useRouter();
@@ -15,13 +15,15 @@ export default function SystemHealthPage() {
   const { data: auditResult, isLoading: isAuditLoading } = useAuditLog();
   const auditLogs = auditResult?.data ?? [];
 
-  const [activeTab, setActiveTab] = React.useState<'health' | 'audit' | 'incidents'>('health');
+  const [activeTab, setActiveTab] = React.useState<'health' | 'audit' | 'incidents' | 'hardening'>('health');
 
   React.useEffect(() => {
     if (pathname.includes('/audit')) {
       setActiveTab('audit');
     } else if (pathname.includes('/incidents')) {
       setActiveTab('incidents');
+    } else if (pathname.includes('/hardening')) {
+      setActiveTab('hardening');
     } else {
       setActiveTab('health');
     }
@@ -47,7 +49,7 @@ export default function SystemHealthPage() {
 
         {/* Navigation Tabs */}
         <div className="flex bg-neutral-100 p-1 rounded-md text-xs font-bold self-start md:self-center gap-1">
-          {(['health', 'audit', 'incidents'] as const).map((tab) => (
+          {(['health', 'audit', 'incidents', 'hardening'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => handleTabChange(tab)}
@@ -57,7 +59,7 @@ export default function SystemHealthPage() {
                   : 'text-neutral-500 hover:text-neutral-900'
               }`}
             >
-              {tab === 'health' ? 'System Health' : tab === 'audit' ? 'Audit Logs' : 'Incidents'}
+              {tab === 'health' ? 'System Health' : tab === 'audit' ? 'Audit Logs' : tab === 'incidents' ? 'Incidents' : 'Hardening'}
             </button>
           ))}
         </div>
@@ -182,6 +184,66 @@ export default function SystemHealthPage() {
               <p className="text-xs text-neutral-400 italic py-8 text-center">No platform incidents recorded. System running stable.</p>
             )}
           </div>
+        )}
+        {/* 4. HARDENING TAB */}
+        {activeTab === 'hardening' && (
+          <HardeningTab />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HardeningTab() {
+  const { data: costData, isLoading } = useHardeningCost();
+  const replayMutation = useReplayOutbox();
+
+  return (
+    <div className="space-y-6 text-xs">
+      <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">Security & Anti-Abuse (Hardening)</h2>
+      
+      {isLoading ? (
+        <p className="text-neutral-400 animate-pulse">Loading hardening costs...</p>
+      ) : costData ? (
+        <div className="space-y-4 max-w-xl">
+          <div className="p-4 border border-neutral-200 rounded-lg bg-neutral-50/50 flex justify-between items-center">
+            <div>
+              <span className="font-bold text-neutral-800 block">Total Mitigation Cost</span>
+              <span className="text-neutral-500 mt-0.5 block">Estimated USD spent on anti-abuse and bot-mitigation API calls.</span>
+            </div>
+            <span className="text-lg font-extrabold text-danger">${costData.totalCostUsd.toFixed(2)}</span>
+          </div>
+
+          <div className="border border-neutral-200 rounded-lg overflow-hidden">
+            <div className="bg-neutral-100 p-3 font-semibold text-neutral-700">Cost Breakdown</div>
+            <div className="divide-y divide-neutral-100">
+              {Object.entries(costData.breakdown).map(([key, value]) => (
+                <div key={key} className="flex justify-between items-center p-3 bg-white">
+                  <span className="text-neutral-600 capitalize">{key.replace(/_/g, ' ')}</span>
+                  <span className="font-bold text-neutral-800">${value.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="text-neutral-400">Failed to load hardening costs.</p>
+      )}
+
+      <div className="pt-6 border-t border-neutral-100 max-w-xl">
+        <h3 className="font-bold text-neutral-800 mb-2">Outbox Recovery</h3>
+        <p className="text-neutral-500 mb-4">
+          If message delivery events are stuck in the transactional outbox due to a message broker failure, you can trigger a manual replay.
+        </p>
+        <button
+          onClick={() => replayMutation.mutate()}
+          disabled={replayMutation.isPending}
+          className="bg-neutral-800 hover:bg-neutral-900 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50"
+        >
+          {replayMutation.isPending ? 'Replaying...' : 'Replay Stuck Outbox Events'}
+        </button>
+        {replayMutation.isSuccess && (
+          <p className="text-success mt-2 font-semibold">Successfully replayed {replayMutation.data.replayed} events.</p>
         )}
       </div>
     </div>

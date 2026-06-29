@@ -519,6 +519,37 @@ export function useCreateTicket() {
   });
 }
 
+export function useSplitTicket() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      ticketId,
+      messageIds,
+      newSubject,
+      targetTeamId,
+    }: {
+      ticketId: string;
+      messageIds: string[];
+      newSubject?: string;
+      targetTeamId?: string;
+    }) => {
+      return normalizeTicket(
+        await api.post<Record<string, unknown>>(`/v1/tickets/${ticketId}/split`, {
+          messageIds,
+          newSubject,
+          targetTeamId,
+        }),
+      );
+    },
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
+      queryClient.invalidateQueries({ queryKey: ['inbox'] });
+    },
+  });
+}
+
 export function useConversationTags(conversationId: string | null) {
   const api = useApiClient();
   return useQuery<string[]>({
@@ -912,7 +943,7 @@ export function useTicketLifecycleAction() {
       payload,
     }: {
       ticketId: string;
-      action: 'start' | 'resolve' | 'close' | 'reopen' | 'escalate';
+      action: 'start' | 'resolve' | 'close' | 'reopen' | 'escalate' | 'pending' | 'resume-sla';
       payload?: Record<string, unknown>;
     }) => {
       return api.post<{ success: boolean }>(`/v1/tickets/${ticketId}/${action}`, payload ?? {});
@@ -924,6 +955,8 @@ export function useTicketLifecycleAction() {
         close: 'closed',
         reopen: 'open',
         escalate: 'escalated',
+        pending: 'pending',
+        'resume-sla': 'in_progress',
       };
       if (statusMap[action]) updateTicketState(ticketId, { status: statusMap[action] as any });
     },

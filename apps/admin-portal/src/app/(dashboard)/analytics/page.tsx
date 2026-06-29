@@ -6,8 +6,10 @@ import {
   useAnalyticsDashboard,
   useAnalyticsAiMetrics,
   useAnalyticsChannelMetrics,
+  useAnalyticsAgentMetrics,
   useTriggerAnalyticsExport,
 } from '../../../hooks/useAdminQueries';
+import { Users } from 'lucide-react';
 
 const TIME_RANGES = [
   { value: 'Last 7 Days', label: 'Last 7 Days' },
@@ -22,6 +24,7 @@ export default function AnalyticsPage() {
   const { data: dashboard, isLoading: isDashboardLoading } = useAnalyticsDashboard(timeRange);
   const { data: aiMetrics, isLoading: isAiLoading } = useAnalyticsAiMetrics(timeRange);
   const { data: channelMetrics, isLoading: isChannelsLoading } = useAnalyticsChannelMetrics(timeRange);
+  const { data: agentMetrics, isLoading: isAgentsLoading } = useAnalyticsAgentMetrics(timeRange);
   const exportMutation = useTriggerAnalyticsExport();
 
   const handleExport = () => {
@@ -154,6 +157,44 @@ export default function AnalyticsPage() {
             <p className="text-xs text-neutral-400 italic">No channel activity in this range.</p>
           )}
         </div>
+      </div>
+
+      {/* Agent Performance Table */}
+      <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs space-y-4">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5 border-b border-neutral-100 pb-3">
+          <Users className="h-4.5 w-4.5 text-indigo-500" />
+          <span>Agent Performance summary</span>
+        </h2>
+        {isAgentsLoading ? (
+          <p className="text-xs text-neutral-400">Loading metrics...</p>
+        ) : agentMetrics && agentMetrics.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-neutral-600">
+              <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-100">
+                <tr>
+                  <th className="px-4 py-2">Agent Name</th>
+                  <th className="px-4 py-2 text-right">Resolved</th>
+                  <th className="px-4 py-2 text-right">Avg Response (s)</th>
+                  <th className="px-4 py-2 text-right">Avg Resolution (s)</th>
+                  <th className="px-4 py-2 text-right">CSAT</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {agentMetrics.map((agent) => (
+                  <tr key={agent.agentId} className="hover:bg-neutral-50">
+                    <td className="px-4 py-2 font-medium text-neutral-900">{agent.displayName || agent.agentId}</td>
+                    <td className="px-4 py-2 text-right font-semibold">{agent.ticketsResolved}</td>
+                    <td className="px-4 py-2 text-right">{Math.round(agent.avgResponseTime)}s</td>
+                    <td className="px-4 py-2 text-right">{Math.round(agent.avgResolutionTime)}s</td>
+                    <td className="px-4 py-2 text-right text-success font-semibold">{agent.csatScore.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-xs text-neutral-400 italic">No agent activity in this range.</p>
+        )}
       </div>
     </div>
   );

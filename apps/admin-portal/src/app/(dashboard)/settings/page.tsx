@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Settings, Image, Clock, ShieldAlert, Trash2, Plus, Building2, AlertTriangle, Copy, Eye, EyeOff, RefreshCw, Puzzle, Bell, Timer } from 'lucide-react';
+import { Settings, Image, Clock, ShieldAlert, Trash2, Plus, Building2, AlertTriangle, Copy, Eye, EyeOff, RefreshCw, Puzzle, Bell, Timer, Bot } from 'lucide-react';
 import {
   useTenantSettings,
   useUpdateTenantSettings,
@@ -22,16 +22,22 @@ import {
   useProvisionTenant,
   useWidgetAdminConfig,
   useRotateWidgetIdentitySecret,
+  useWidgetSettings,
+  useUpdateWidgetSettings,
   useNotificationSettings,
   useUpdateNotificationSettings,
   useSlaSettings,
   useUpdateSlaSettings,
+  useAiSettings,
+  useUpdateAiSettings,
+  useChannelSettings,
+  useUpdateChannelSettings,
 } from '@/hooks/useAdminQueries';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-type Tab = 'general' | 'branding' | 'business-hours' | 'holidays' | 'security' | 'feature-flags' | 'usage-limits' | 'notifications' | 'sla' | 'provisioning' | 'widget';
-const TABS: Tab[] = ['general', 'branding', 'business-hours', 'holidays', 'security', 'feature-flags', 'usage-limits', 'notifications', 'sla', 'provisioning', 'widget'];
+type Tab = 'general' | 'branding' | 'business-hours' | 'holidays' | 'security' | 'feature-flags' | 'usage-limits' | 'notifications' | 'sla' | 'provisioning' | 'widget' | 'ai-settings' | 'channel-settings';
+const TABS: Tab[] = ['general', 'branding', 'business-hours', 'holidays', 'security', 'feature-flags', 'usage-limits', 'notifications', 'sla', 'provisioning', 'widget', 'ai-settings', 'channel-settings'];
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -84,6 +90,8 @@ export default function SettingsPage() {
         {activeTab === 'sla' && <SlaTab />}
         {activeTab === 'provisioning' && <ProvisioningTab />}
         {activeTab === 'widget' && <WidgetTab />}
+        {activeTab === 'ai-settings' && <AiTab />}
+        {activeTab === 'channel-settings' && <ChannelSettingsTab />}
       </div>
     </div>
   );
@@ -656,10 +664,8 @@ function NotificationsTab() {
     emailEnabled: true,
     smsEnabled: false,
     pushEnabled: true,
-    inAppEnabled: true,
-    digestFrequency: 'REALTIME' as 'REALTIME' | 'HOURLY' | 'DAILY',
-    quietHoursStart: '',
-    quietHoursEnd: '',
+    webhookEnabled: false,
+    digestEnabled: false,
   });
 
   React.useEffect(() => {
@@ -668,10 +674,8 @@ function NotificationsTab() {
       emailEnabled: settings.emailEnabled ?? true,
       smsEnabled: settings.smsEnabled ?? false,
       pushEnabled: settings.pushEnabled ?? true,
-      inAppEnabled: settings.inAppEnabled ?? true,
-      digestFrequency: settings.digestFrequency ?? 'REALTIME',
-      quietHoursStart: settings.quietHoursStart ?? '',
-      quietHoursEnd: settings.quietHoursEnd ?? '',
+      webhookEnabled: settings.webhookEnabled ?? false,
+      digestEnabled: settings.digestEnabled ?? false,
     });
   }, [settings]);
 
@@ -689,7 +693,8 @@ function NotificationsTab() {
           { key: 'emailEnabled', label: 'Email Notifications' },
           { key: 'smsEnabled', label: 'SMS Notifications' },
           { key: 'pushEnabled', label: 'Push Notifications' },
-          { key: 'inAppEnabled', label: 'In-App Notifications' },
+          { key: 'webhookEnabled', label: 'Webhook Notifications' },
+          { key: 'digestEnabled', label: 'Daily/Weekly Digest' },
         ] as const).map(({ key, label }) => (
           <div key={key} className="flex items-center justify-between p-3 border border-neutral-100 rounded-lg bg-neutral-50/40">
             <span className="font-semibold text-neutral-700">{label}</span>
@@ -702,43 +707,6 @@ function NotificationsTab() {
             />
           </div>
         ))}
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="notif-digest" className="font-semibold text-neutral-600">Digest Frequency</label>
-        <select
-          id="notif-digest"
-          value={form.digestFrequency}
-          onChange={(e) => setForm((f) => ({ ...f, digestFrequency: e.target.value as typeof form.digestFrequency }))}
-          className="w-full border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
-        >
-          <option value="REALTIME">Realtime</option>
-          <option value="HOURLY">Hourly digest</option>
-          <option value="DAILY">Daily digest</option>
-        </select>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="quiet-start" className="font-semibold text-neutral-600">Quiet Hours Start</label>
-          <input
-            id="quiet-start"
-            type="time"
-            value={form.quietHoursStart}
-            onChange={(e) => setForm((f) => ({ ...f, quietHoursStart: e.target.value }))}
-            className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="quiet-end" className="font-semibold text-neutral-600">Quiet Hours End</label>
-          <input
-            id="quiet-end"
-            type="time"
-            value={form.quietHoursEnd}
-            onChange={(e) => setForm((f) => ({ ...f, quietHoursEnd: e.target.value }))}
-            className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
-          />
-        </div>
       </div>
 
       <button
@@ -757,19 +725,17 @@ function SlaTab() {
   const updateMutation = useUpdateSlaSettings();
   const [form, setForm] = React.useState({
     firstResponseSlaMinutes: 60,
-    resolutionSlaMinutes: 480,
-    breachNotificationEnabled: true,
-    breachNotificationMinutesBefore: 15,
+    resolutionSlaMinutes: 1440,
+    escalationSlaMinutes: 240,
     businessHoursOnly: true,
   });
 
   React.useEffect(() => {
     if (!settings) return;
     setForm({
-      firstResponseSlaMinutes: settings.firstResponseSlaMinutes ?? 60,
-      resolutionSlaMinutes: settings.resolutionSlaMinutes ?? 480,
-      breachNotificationEnabled: settings.breachNotificationEnabled ?? true,
-      breachNotificationMinutesBefore: settings.breachNotificationMinutesBefore ?? 15,
+      firstResponseSlaMinutes: settings.responseTimeTarget ? Math.round(settings.responseTimeTarget / 60) : 60,
+      resolutionSlaMinutes: settings.resolutionTimeTarget ? Math.round(settings.resolutionTimeTarget / 60) : 1440,
+      escalationSlaMinutes: settings.escalationTimeTarget ? Math.round(settings.escalationTimeTarget / 60) : 240,
       businessHoursOnly: settings.businessHoursOnly ?? true,
     });
   }, [settings]);
@@ -806,32 +772,20 @@ function SlaTab() {
             className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
           />
         </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="sla-escalation" className="font-semibold text-neutral-600">Escalation Alert (minutes)</label>
+          <input
+            id="sla-escalation"
+            type="number"
+            min={1}
+            value={form.escalationSlaMinutes}
+            onChange={(e) => setForm((f) => ({ ...f, escalationSlaMinutes: Number(e.target.value) }))}
+            className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
       </div>
 
       <div className="space-y-3">
-        <div className="flex items-center justify-between p-3 border border-neutral-100 rounded-lg bg-neutral-50/40">
-          <span className="font-semibold text-neutral-700">Send breach warning notifications</span>
-          <input
-            type="checkbox"
-            checked={form.breachNotificationEnabled}
-            onChange={(e) => setForm((f) => ({ ...f, breachNotificationEnabled: e.target.checked }))}
-            className="h-4 w-4 rounded text-primary-500"
-            aria-label="Enable breach notifications"
-          />
-        </div>
-        {form.breachNotificationEnabled && (
-          <div className="flex flex-col gap-1.5 pl-4 border-l-2 border-primary-200">
-            <label htmlFor="sla-warn-before" className="font-semibold text-neutral-600">Warn this many minutes before breach</label>
-            <input
-              id="sla-warn-before"
-              type="number"
-              min={1}
-              value={form.breachNotificationMinutesBefore}
-              onChange={(e) => setForm((f) => ({ ...f, breachNotificationMinutesBefore: Number(e.target.value) }))}
-              className="w-32 border border-neutral-200 rounded p-2 bg-white focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-        )}
         <div className="flex items-center justify-between p-3 border border-neutral-100 rounded-lg bg-neutral-50/40">
           <span className="font-semibold text-neutral-700">SLA only counts during business hours</span>
           <input
@@ -845,7 +799,12 @@ function SlaTab() {
       </div>
 
       <button
-        onClick={() => updateMutation.mutate(form)}
+        onClick={() => updateMutation.mutate({
+          responseTimeTarget: form.firstResponseSlaMinutes * 60,
+          resolutionTimeTarget: form.resolutionSlaMinutes * 60,
+          escalationTimeTarget: form.escalationSlaMinutes * 60,
+          businessHoursOnly: form.businessHoursOnly
+        })}
         disabled={updateMutation.isPending}
         className="bg-neutral-800 hover:bg-neutral-900 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50"
       >
@@ -856,9 +815,37 @@ function SlaTab() {
 }
 
 function WidgetTab() {
-  const { data: config, isLoading } = useWidgetAdminConfig();
+  const { data: config, isLoading: isConfigLoading } = useWidgetAdminConfig();
   const rotateMutation = useRotateWidgetIdentitySecret();
   const [revealed, setRevealed] = React.useState(false);
+
+  const { data: settings, isLoading: isSettingsLoading } = useWidgetSettings();
+  const updateMutation = useUpdateWidgetSettings();
+
+  const [form, setForm] = React.useState({
+    widgetName: '',
+    widgetColor: '',
+    widgetPosition: '',
+    welcomeMessage: '',
+    offlineMessage: '',
+    avatarUrl: '',
+    customCss: '',
+    customJs: '',
+  });
+
+  React.useEffect(() => {
+    if (!settings) return;
+    setForm({
+      widgetName: settings.widgetName || '',
+      widgetColor: settings.widgetColor || '#000000',
+      widgetPosition: settings.widgetPosition || 'BOTTOM_RIGHT',
+      welcomeMessage: settings.welcomeMessage || '',
+      offlineMessage: settings.offlineMessage || '',
+      avatarUrl: settings.avatarUrl || '',
+      customCss: settings.customCss || '',
+      customJs: settings.customJs || '',
+    });
+  }, [settings]);
 
   const handleRotate = () => {
     if (confirm('Rotate the identity verification secret? Any signatures your backend has already computed with the old secret will stop working immediately.')) {
@@ -866,58 +853,381 @@ function WidgetTab() {
     }
   };
 
+  if (isConfigLoading || isSettingsLoading) {
+    return <p className="text-xs text-neutral-400 animate-pulse py-8 text-center">Loading widget configuration...</p>;
+  }
+
+  return (
+    <div className="max-w-xl space-y-8 text-xs text-neutral-800">
+      <div className="space-y-6">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5 border-b border-neutral-50 pb-2">
+          <Puzzle className="h-4 w-4 text-primary-500" />
+          <span>Widget Display Settings</span>
+        </h2>
+        
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="font-semibold text-neutral-600">Widget Name</label>
+            <input
+              type="text"
+              value={form.widgetName}
+              onChange={(e) => setForm(f => ({ ...f, widgetName: e.target.value }))}
+              className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+              placeholder="Live Chat"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="font-semibold text-neutral-600">Widget Color</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={form.widgetColor}
+                onChange={(e) => setForm(f => ({ ...f, widgetColor: e.target.value }))}
+                className="h-10 w-10 p-1 bg-white border border-neutral-200 rounded cursor-pointer"
+              />
+              <input
+                type="text"
+                value={form.widgetColor}
+                onChange={(e) => setForm(f => ({ ...f, widgetColor: e.target.value }))}
+                className="flex-1 border border-neutral-200 rounded p-2.5 bg-white font-mono uppercase focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="font-semibold text-neutral-600">Position</label>
+            <select
+              value={form.widgetPosition}
+              onChange={(e) => setForm(f => ({ ...f, widgetPosition: e.target.value }))}
+              className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="BOTTOM_RIGHT">Bottom Right</option>
+              <option value="BOTTOM_LEFT">Bottom Left</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="font-semibold text-neutral-600">Avatar URL</label>
+            <input
+              type="url"
+              value={form.avatarUrl}
+              onChange={(e) => setForm(f => ({ ...f, avatarUrl: e.target.value }))}
+              className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+              placeholder="https://example.com/avatar.png"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="font-semibold text-neutral-600">Welcome Message</label>
+          <textarea
+            value={form.welcomeMessage}
+            onChange={(e) => setForm(f => ({ ...f, welcomeMessage: e.target.value }))}
+            rows={2}
+            className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+            placeholder="Hi there! How can we help you today?"
+          />
+        </div>
+        
+        <div className="flex flex-col gap-1.5">
+          <label className="font-semibold text-neutral-600">Offline Message</label>
+          <textarea
+            value={form.offlineMessage}
+            onChange={(e) => setForm(f => ({ ...f, offlineMessage: e.target.value }))}
+            rows={2}
+            className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+            placeholder="We are currently offline. Leave a message."
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => updateMutation.mutate(form)}
+          disabled={updateMutation.isPending}
+          className="bg-neutral-800 hover:bg-neutral-900 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50"
+        >
+          {updateMutation.isPending ? 'Saving...' : 'Save Display Settings'}
+        </button>
+      </div>
+
+      <div className="space-y-6">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5 border-b border-neutral-50 pb-2">
+          <Puzzle className="h-4 w-4 text-primary-500" />
+          <span>Widget Identity Verification</span>
+        </h2>
+        <p className="text-neutral-400">
+          If you identify logged-in customers to the chat widget, your own backend must sign each identity with this
+          secret (HMAC SHA256 of <code className="bg-neutral-100 px-1 rounded">externalUserId:email</code>) before
+          passing it to the widget - never expose this secret in browser code.
+        </p>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="font-semibold text-neutral-600">Verification Secret</label>
+          <div className="flex items-center gap-2 bg-white border border-neutral-200 rounded p-2.5 font-mono text-neutral-800">
+            <span className="flex-1 break-all">
+              {revealed ? config?.identityVerificationSecret : '•'.repeat(48)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setRevealed((v) => !v)}
+              className="p-1 hover:bg-neutral-100 rounded shrink-0"
+              aria-label={revealed ? 'Hide secret' : 'Reveal secret'}
+            >
+              {revealed ? <EyeOff className="h-3.5 w-3.5 text-neutral-500" /> : <Eye className="h-3.5 w-3.5 text-neutral-500" />}
+            </button>
+            {revealed && (
+              <button
+                type="button"
+                onClick={() => config?.identityVerificationSecret && navigator.clipboard.writeText(config.identityVerificationSecret)}
+                className="p-1 hover:bg-neutral-100 rounded shrink-0"
+                aria-label="Copy secret"
+              >
+                <Copy className="h-3.5 w-3.5 text-neutral-500" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleRotate}
+          disabled={rotateMutation.isPending}
+          className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-900 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          <span>{rotateMutation.isPending ? 'Rotating...' : 'Rotate Secret'}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AiTab() {
+  const { data: settings, isLoading } = useAiSettings();
+  const updateMutation = useUpdateAiSettings();
+
+  const [form, setForm] = React.useState({
+    defaultAgent: '',
+    confidenceThreshold: 0.7,
+    escalationThreshold: 0.4,
+    allowedLanguages: 'en',
+    defaultLanguage: 'en',
+    autoResponseEnabled: true,
+    autoEscalationEnabled: true,
+    costLimitDaily: 50,
+    costLimitMonthly: 1000,
+  });
+
+  React.useEffect(() => {
+    if (!settings) return;
+    setForm({
+      defaultAgent: settings.defaultAgent || '',
+      confidenceThreshold: settings.confidenceThreshold ?? 0.7,
+      escalationThreshold: settings.escalationThreshold ?? 0.4,
+      allowedLanguages: settings.allowedLanguages?.join(', ') || 'en',
+      defaultLanguage: settings.defaultLanguage || 'en',
+      autoResponseEnabled: settings.autoResponseEnabled ?? true,
+      autoEscalationEnabled: settings.autoEscalationEnabled ?? true,
+      costLimitDaily: settings.costLimitDaily ?? 50,
+      costLimitMonthly: settings.costLimitMonthly ?? 1000,
+    });
+  }, [settings]);
+
   if (isLoading) {
-    return <p className="text-xs text-neutral-400">Loading widget configuration...</p>;
+    return <p className="text-xs text-neutral-400 animate-pulse py-8 text-center">Loading AI settings...</p>;
+  }
+
+  return (
+    <div className="max-w-xl space-y-6 text-xs text-neutral-800">
+      <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5 border-b border-neutral-50 pb-2">
+        <Bot className="h-4 w-4 text-primary-500" />
+        <span>AI Agent & Automation Settings</span>
+      </h2>
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="font-semibold text-neutral-600">Default AI Agent ID</label>
+            <input
+              type="text"
+              value={form.defaultAgent}
+              onChange={(e) => setForm(f => ({ ...f, defaultAgent: e.target.value }))}
+              className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+              placeholder="agent_xxx"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="font-semibold text-neutral-600">Default Language</label>
+            <input
+              type="text"
+              value={form.defaultLanguage}
+              onChange={(e) => setForm(f => ({ ...f, defaultLanguage: e.target.value }))}
+              className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="font-semibold text-neutral-600">Confidence Threshold (0.0 - 1.0)</label>
+            <input
+              type="number"
+              step="0.05"
+              min="0"
+              max="1"
+              value={form.confidenceThreshold}
+              onChange={(e) => setForm(f => ({ ...f, confidenceThreshold: parseFloat(e.target.value) || 0 }))}
+              className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="font-semibold text-neutral-600">Escalation Threshold (0.0 - 1.0)</label>
+            <input
+              type="number"
+              step="0.05"
+              min="0"
+              max="1"
+              value={form.escalationThreshold}
+              onChange={(e) => setForm(f => ({ ...f, escalationThreshold: parseFloat(e.target.value) || 0 }))}
+              className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="font-semibold text-neutral-600">Allowed Languages (comma separated ISO codes)</label>
+          <input
+            type="text"
+            value={form.allowedLanguages}
+            onChange={(e) => setForm(f => ({ ...f, allowedLanguages: e.target.value }))}
+            className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+            placeholder="en, es, fr, de"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="font-semibold text-neutral-600">Daily Cost Limit ($)</label>
+            <input
+              type="number"
+              min="0"
+              value={form.costLimitDaily}
+              onChange={(e) => setForm(f => ({ ...f, costLimitDaily: parseInt(e.target.value) || 0 }))}
+              className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="font-semibold text-neutral-600">Monthly Cost Limit ($)</label>
+            <input
+              type="number"
+              min="0"
+              value={form.costLimitMonthly}
+              onChange={(e) => setForm(f => ({ ...f, costLimitMonthly: parseInt(e.target.value) || 0 }))}
+              className="border border-neutral-200 rounded p-2.5 bg-white focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between p-3 border border-neutral-100 rounded-lg bg-neutral-50/40">
+          <span className="font-semibold text-neutral-700">Enable Auto-Response (AI answers directly)</span>
+          <input
+            type="checkbox"
+            checked={form.autoResponseEnabled}
+            onChange={(e) => setForm((f) => ({ ...f, autoResponseEnabled: e.target.checked }))}
+            className="h-4 w-4 rounded text-primary-500"
+          />
+        </div>
+        <div className="flex items-center justify-between p-3 border border-neutral-100 rounded-lg bg-neutral-50/40">
+          <span className="font-semibold text-neutral-700">Enable Auto-Escalation (fallback to human)</span>
+          <input
+            type="checkbox"
+            checked={form.autoEscalationEnabled}
+            onChange={(e) => setForm((f) => ({ ...f, autoEscalationEnabled: e.target.checked }))}
+            className="h-4 w-4 rounded text-primary-500"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const payload = {
+              ...form,
+              allowedLanguages: form.allowedLanguages.split(',').map(s => s.trim()).filter(Boolean)
+            };
+            updateMutation.mutate(payload);
+          }}
+          disabled={updateMutation.isPending}
+          className="bg-neutral-800 hover:bg-neutral-900 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50"
+        >
+          {updateMutation.isPending ? 'Saving...' : 'Save AI Settings'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+function ChannelSettingsTab() {
+  const { data: channels, isLoading } = useChannelSettings();
+  const updateMutation = useUpdateChannelSettings();
+
+  if (isLoading) {
+    return <p className="text-xs text-neutral-400 animate-pulse py-8 text-center">Loading channels...</p>;
+  }
+
+  const channelList = channels || [];
+  if (channelList.length === 0) {
+    return <p className="text-xs text-neutral-400 py-8 text-center">No channels configured.</p>;
   }
 
   return (
     <div className="max-w-xl space-y-6 text-xs text-neutral-800">
       <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5 border-b border-neutral-50 pb-2">
         <Puzzle className="h-4 w-4 text-primary-500" />
-        <span>Widget Identity Verification</span>
+        <span>Communication Channels</span>
       </h2>
-      <p className="text-neutral-400">
-        If you identify logged-in customers to the chat widget, your own backend must sign each identity with this
-        secret (HMAC SHA256 of <code className="bg-neutral-100 px-1 rounded">externalUserId:email</code>) before
-        passing it to the widget - never expose this secret in browser code.
-      </p>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="font-semibold text-neutral-600">Verification Secret</label>
-        <div className="flex items-center gap-2 bg-white border border-neutral-200 rounded p-2.5 font-mono text-neutral-800">
-          <span className="flex-1 break-all">
-            {revealed ? config?.identityVerificationSecret : '•'.repeat(48)}
-          </span>
-          <button
-            type="button"
-            onClick={() => setRevealed((v) => !v)}
-            className="p-1 hover:bg-neutral-100 rounded shrink-0"
-            aria-label={revealed ? 'Hide secret' : 'Reveal secret'}
-          >
-            {revealed ? <EyeOff className="h-3.5 w-3.5 text-neutral-500" /> : <Eye className="h-3.5 w-3.5 text-neutral-500" />}
-          </button>
-          {revealed && (
-            <button
-              type="button"
-              onClick={() => config?.identityVerificationSecret && navigator.clipboard.writeText(config.identityVerificationSecret)}
-              className="p-1 hover:bg-neutral-100 rounded shrink-0"
-              aria-label="Copy secret"
-            >
-              <Copy className="h-3.5 w-3.5 text-neutral-500" />
-            </button>
-          )}
-        </div>
+      <div className="space-y-4">
+        {channelList.map((channel) => (
+          <div key={channel.channelType} className="border border-neutral-200 rounded-lg p-4 bg-white space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-neutral-900 uppercase">{channel.channelType}</h3>
+              <div className="flex items-center gap-2">
+                <label className="text-neutral-600 font-semibold">Enabled</label>
+                <input
+                  type="checkbox"
+                  checked={channel.enabled}
+                  onChange={(e) => updateMutation.mutate({ ...channel, enabled: e.target.checked })}
+                  className="h-4 w-4 rounded text-primary-500"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center justify-between p-2 border border-neutral-100 rounded bg-neutral-50/40">
+                <span className="text-neutral-700">Business Hours Only</span>
+                <input
+                  type="checkbox"
+                  checked={channel.businessHoursOnly}
+                  onChange={(e) => updateMutation.mutate({ ...channel, businessHoursOnly: e.target.checked })}
+                  className="h-4 w-4 rounded text-primary-500"
+                />
+              </div>
+              <div className="flex items-center justify-between p-2 border border-neutral-100 rounded bg-neutral-50/40">
+                <span className="text-neutral-700">Auto Assignment</span>
+                <input
+                  type="checkbox"
+                  checked={channel.autoAssignmentEnabled}
+                  onChange={(e) => updateMutation.mutate({ ...channel, autoAssignmentEnabled: e.target.checked })}
+                  className="h-4 w-4 rounded text-primary-500"
+                />
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
-
-      <button
-        type="button"
-        onClick={handleRotate}
-        disabled={rotateMutation.isPending}
-        className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-900 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50"
-      >
-        <RefreshCw className="h-3.5 w-3.5" />
-        <span>{rotateMutation.isPending ? 'Rotating...' : 'Rotate Secret'}</span>
-      </button>
     </div>
   );
 }
+
