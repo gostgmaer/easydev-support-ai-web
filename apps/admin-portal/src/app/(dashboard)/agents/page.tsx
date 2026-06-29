@@ -2,31 +2,42 @@
 
 import * as React from 'react';
 import { Globe, Gauge, UserPlus } from 'lucide-react';
-import { useAgentProfiles, useCreateAgentProfile, useUpdateAgentProfile, useDeleteAgentProfile } from '../../../hooks/useAdminQueries';
+import { useAgentProfiles, useCreateAgentProfile, useUpdateAgentProfile, useDeleteAgentProfile, useProvisionAgentUser } from '../../../hooks/useAdminQueries';
 
 export default function AgentsPage() {
   const [search, setSearch] = React.useState('');
   const { data: agents, isLoading, isError } = useAgentProfiles(search || undefined);
-  const createAgentMutation = useCreateAgentProfile();
-
+  const provisionAgentMutation = useProvisionAgentUser();
   const [isCreating, setIsCreating] = React.useState(false);
   const [newDisplayName, setNewDisplayName] = React.useState('');
   const [newEmployeeCode, setNewEmployeeCode] = React.useState('');
+  const [newEmail, setNewEmail] = React.useState('');
+  const [newPassword, setNewPassword] = React.useState('');
 
   const handleCreateAgent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDisplayName.trim()) return;
-    createAgentMutation.mutate(
+    if (!newDisplayName.trim() || !newEmail.trim() || !newPassword.trim()) return;
+    
+    provisionAgentMutation.mutate(
+      { email: newEmail.trim(), name: newDisplayName.trim(), password: newPassword },
       {
-        userId: crypto.randomUUID(), // Mocking an IAM user ID for demo purposes
-        displayName: newDisplayName.trim(),
-        employeeCode: newEmployeeCode.trim() || undefined,
-      },
-      {
-        onSuccess: () => {
-          setIsCreating(false);
-          setNewDisplayName('');
-          setNewEmployeeCode('');
+        onSuccess: (data) => {
+          createAgentMutation.mutate(
+            {
+              userId: data.id,
+              displayName: newDisplayName.trim(),
+              employeeCode: newEmployeeCode.trim() || undefined,
+            },
+            {
+              onSuccess: () => {
+                setIsCreating(false);
+                setNewDisplayName('');
+                setNewEmployeeCode('');
+                setNewEmail('');
+                setNewPassword('');
+              },
+            }
+          );
         },
       }
     );
@@ -79,6 +90,30 @@ export default function AgentsPage() {
               />
             </div>
             <div className="space-y-1.5">
+              <label htmlFor="email" className="block text-xs font-semibold text-neutral-700">Email Address (for IAM Login)</label>
+              <input
+                id="email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="john.doe@example.com"
+                className="w-full text-xs rounded border border-neutral-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="password" className="block text-xs font-semibold text-neutral-700">Initial Password</label>
+              <input
+                id="password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Required for login"
+                className="w-full text-xs rounded border border-neutral-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
               <label htmlFor="employeeCode" className="block text-xs font-semibold text-neutral-700">Employee Code (Optional)</label>
               <input
                 id="employeeCode"
@@ -100,10 +135,10 @@ export default function AgentsPage() {
             </button>
             <button
               type="submit"
-              disabled={createAgentMutation.isPending || !newDisplayName.trim()}
+              disabled={createAgentMutation.isPending || provisionAgentMutation.isPending || !newDisplayName.trim() || !newEmail.trim() || !newPassword.trim()}
               className="bg-neutral-900 text-white px-4 py-2 rounded text-xs font-medium hover:bg-neutral-800 transition-colors disabled:opacity-50"
             >
-              {createAgentMutation.isPending ? 'Creating...' : 'Create Agent'}
+              {provisionAgentMutation.isPending || createAgentMutation.isPending ? 'Provisioning...' : 'Provision Agent'}
             </button>
           </div>
         </form>
