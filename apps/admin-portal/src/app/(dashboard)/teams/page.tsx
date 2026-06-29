@@ -98,8 +98,12 @@ function TeamMembersPanel({ team }: { team: Team }) {
 
       {isAgentsLoading ? (
         <p className="text-neutral-400">Loading agents...</p>
+      ) : agentProfiles.length === 0 ? (
+        <p className="text-neutral-400 italic">
+          No agent profiles exist. <a href="/agents" className="text-primary-600 hover:underline">Create an agent first</a>.
+        </p>
       ) : availableAgents.length === 0 ? (
-        <p className="text-neutral-400 italic">All agent profiles are already on this team.</p>
+        <p className="text-neutral-400 italic">All available agents are already on this team.</p>
       ) : (
         <form onSubmit={handleAddMember} className="flex items-end gap-2 pt-2 border-t border-neutral-100">
           <div className="flex flex-col gap-1 flex-1">

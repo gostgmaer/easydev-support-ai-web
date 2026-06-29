@@ -424,6 +424,7 @@ export function useAuditLog() {
 
 // 4b. AI SETTINGS
 export interface AiSettings {
+  defaultAgent?: string;
   confidenceThreshold: number;
   escalationThreshold: number;
   allowedLanguages?: string[];
@@ -432,24 +433,29 @@ export interface AiSettings {
   autoEscalationEnabled: boolean;
   costLimitDaily?: number;
   costLimitMonthly?: number;
+  modelConfiguration?: Record<string, any>;
 }
 
-export function useAiSettings() {
-  const apiClient = useApiClient();
-  return useQuery<AiSettings>({
-    queryKey: ['admin', 'ai-settings'],
-    queryFn: () => apiClient.get<AiSettings>('/v1/settings/ai'),
-  });
-}
-
+export const useAiSettings = settingsQuery<AiSettings>('ai', '/v1/settings/ai');
 export function useUpdateAiSettings() {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (dto: Partial<AiSettings>) => apiClient.put<AiSettings>('/v1/settings/ai', dto),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'ai-settings'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'ai'] }),
   });
 }
+
+export interface ChannelSettings {
+  channelType: string;
+  enabled: boolean;
+  businessHoursOnly: boolean;
+  autoAssignmentEnabled: boolean;
+  configuration?: Record<string, any>;
+}
+
+export const useChannelSettings = settingsQuery<ChannelSettings[]>('channels', '/v1/settings/channels');
+export const useUpdateChannelSettings = settingsMutation<ChannelSettings>('channels', '/v1/settings/channels', 'put');
 
 // 5. INCIDENTS & HEALTH
 export function useIncidentsAlerts() {
@@ -566,6 +572,34 @@ export function useCreateAgentProfile() {
   return useMutation({
     mutationFn: async (variables: { userId: string; displayName: string; employeeCode?: string; timezone?: string }) => {
       return apiClient.post<AgentProfile>('/v1/agents', variables);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'agent-profiles'] });
+    },
+  });
+}
+
+export function useUpdateAgentProfile() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<AgentProfile> & { maxConcurrentConversations?: number; maxOpenTickets?: number; capacityScore?: number } }) => {
+      return apiClient.put<AgentProfile>(`/v1/agents/${id}`, data);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'agent-profiles'] });
+    },
+  });
+}
+
+export function useDeleteAgentProfile() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      return apiClient.delete<{ success: boolean }>(`/v1/agents/${id}`);
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'agent-profiles'] });
@@ -869,6 +903,7 @@ export interface HolidayEntry {
   holidayDate: string;
   isRecurring: boolean;
   country?: string;
+  region?: string;
 }
 
 export interface SecuritySettings {
@@ -941,6 +976,20 @@ export function useDeleteHoliday() {
 
 export const useSecuritySettings = settingsQuery<SecuritySettings>('security', '/v1/settings/security');
 export const useUpdateSecuritySettings = settingsMutation<Partial<SecuritySettings>>('security', '/v1/settings/security');
+
+export interface WidgetSettings {
+  widgetName?: string;
+  widgetColor?: string;
+  widgetPosition?: string;
+  welcomeMessage?: string;
+  offlineMessage?: string;
+  avatarUrl?: string;
+  customCss?: string;
+  customJs?: string;
+}
+
+export const useWidgetSettings = settingsQuery<WidgetSettings>('widget', '/v1/settings/widget');
+export const useUpdateWidgetSettings = settingsMutation<Partial<WidgetSettings>>('widget', '/v1/settings/widget');
 
 export const useFeatureFlags = settingsQuery<FeatureFlagEntry[]>('feature-flags', '/v1/settings/feature-flags');
 export const useSaveFeatureFlag = settingsMutation<{ featureKey: string; enabled: boolean; rolloutPercentage: number }>(
@@ -2395,18 +2444,18 @@ export interface NotificationSettings {
   emailEnabled: boolean;
   smsEnabled: boolean;
   pushEnabled: boolean;
-  inAppEnabled: boolean;
-  digestFrequency: 'REALTIME' | 'HOURLY' | 'DAILY';
-  quietHoursStart?: string;
-  quietHoursEnd?: string;
+  webhookEnabled: boolean;
+  digestEnabled: boolean;
+  configuration?: Record<string, any>;
 }
 
 export interface SlaSettings {
-  firstResponseSlaMinutes: number;
-  resolutionSlaMinutes: number;
-  breachNotificationEnabled: boolean;
-  breachNotificationMinutesBefore: number;
+  id?: string;
+  responseTimeTarget: number;
+  resolutionTimeTarget: number;
+  escalationTimeTarget: number;
   businessHoursOnly: boolean;
+  configuration?: any;
 }
 
 export const useNotificationSettings = settingsQuery<NotificationSettings>(

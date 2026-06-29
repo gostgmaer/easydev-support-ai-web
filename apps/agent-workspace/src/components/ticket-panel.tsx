@@ -2,8 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { CheckCircle2, Link2, XCircle } from 'lucide-react';
 import { TicketSidebar, AuditTimeline, Section, type TimelineEntry } from '@easydev/ui';
 import { Can } from '@easydev/permissions';
+import { useAuth } from '@easydev/auth';
 import { TicketApproval, ConversationPriority } from '../types';
-import { useTicketByConversation, useUpdateTicket, useCreateTicket, useAddTicketComment } from '../hooks/useQueries';
+import { useTicketByConversation, useUpdateTicket, useCreateTicket, useAddTicketComment, useTicketLifecycleAction, useDecideTicketApproval, useAssignTicket } from '../hooks/useQueries';
 import { useInboxStore } from '../store/inboxStore';
 import { toTicketDetails } from '../lib/ui-adapters';
 
@@ -21,6 +22,10 @@ export function TicketPanel() {
   const updateTicketMutation = useUpdateTicket();
   const createTicketMutation = useCreateTicket();
   const addCommentMutation = useAddTicketComment();
+  const lifecycleMutation = useTicketLifecycleAction();
+  const decideApprovalMutation = useDecideTicketApproval();
+  const assignMutation = useAssignTicket();
+  const { user } = useAuth();
 
   const { data: ticket, isLoading } = useTicketByConversation(activeConversationId);
   const [commentText, setCommentText] = useState('');
@@ -81,13 +86,20 @@ export function TicketPanel() {
     updateTicketMutation.mutate({ ticketId: ticket.id, updates: { priority } });
   };
 
+  const handleStatusChange = (status: Ticket['status']) => {
+    updateTicketMutation.mutate({ ticketId: ticket.id, updates: { status } });
+  };
+
   const handleEscalationToggle = () => {
-    updateTicketMutation.mutate({ ticketId: ticket.id, updates: { escalated: !ticket.escalated } });
+    if (!ticket.escalated) {
+      lifecycleMutation.mutate({ ticketId: ticket.id, action: 'escalate' });
+    }
   };
 
   const handleApprovalUpdate = (approvalId: string, status: TicketApproval['status']) => {
-    const approvals = ticket.approvals.map((app) => (app.id === approvalId ? { ...app, status } : app));
-    updateTicketMutation.mutate({ ticketId: ticket.id, updates: { approvals } });
+    if (status === 'approved' || status === 'rejected') {
+      decideApprovalMutation.mutate({ approvalId, ticketId: ticket.id, decision: status === 'approved' ? 'approve' : 'reject' });
+    }
   };
 
   const handleAddComment = () => {
@@ -119,22 +131,59 @@ export function TicketPanel() {
         </div>
 
         <div className="flex items-center justify-between">
+          <label htmlFor="ticket-status" className="font-semibold text-neutral-600">
+            Status
+          </label>
+          <select
+            id="ticket-status"
+            value={ticket.status}
+            onChange={(e) => handleStatusChange(e.target.value as Ticket['status'])}
+            className="w-32 rounded border border-neutral-200 bg-white p-1.5 font-medium text-neutral-800 focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="open">Open</option>
+            <option value="pending">Pending</option>
+            <option value="solved">Solved</option>
+            <option value="closed">Closed</option>
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between">
           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${SLA_COLORS[ticket.slaStatus]}`}>
             SLA: {ticket.slaStatus.replace('_', ' ')}
           </span>
           <Can resource="ticket" action="update">
-            <label htmlFor="ticket-escalated" className="flex items-center gap-1 font-semibold text-neutral-600">
-              <span>Escalated to Tier 2</span>
+            <label htmlFor="ticket-escalated" className={`flex items-center gap-1 font-semibold ${ticket.escalated ? 'text-danger' : 'text-neutral-600'}`}>
+              <span>{ticket.escalated ? 'Escalated to Tier 2' : 'Escalate to Tier 2'}</span>
               <input
                 id="ticket-escalated"
                 type="checkbox"
                 checked={ticket.escalated}
                 onChange={handleEscalationToggle}
-                className="h-4 w-4 cursor-pointer rounded border-neutral-300 text-danger focus:ring-danger"
+                disabled={ticket.escalated || lifecycleMutation.isPending}
+                className="h-4 w-4 cursor-pointer rounded border-neutral-300 text-danger focus:ring-danger disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </label>
           </Can>
         </div>
+
+        {user && (
+          <div className="flex items-center justify-between pt-2 border-t border-neutral-100">
+            <span className="font-semibold text-neutral-600">Assigned Agent</span>
+            {ticket.assignedAgentId ? (
+              <span className="font-bold text-neutral-900">{ticket.assignedAgentId === user.id ? 'You' : ticket.assignedAgentId}</span>
+            ) : (
+              <Can resource="ticket" action="assign">
+                <button
+                  onClick={() => assignMutation.mutate({ ticketId: ticket.id, agentProfileId: user.id })}
+                  disabled={assignMutation.isPending}
+                  className="text-[10px] font-bold text-primary-600 hover:underline disabled:opacity-50"
+                >
+                  {assignMutation.isPending ? 'Claiming...' : 'Claim Ticket'}
+                </button>
+              </Can>
+            )}
+          </div>
+        )}
       </div>
 
       <Section title="Required approvals" className="p-4">
