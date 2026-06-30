@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { useWidgetStore } from '../../../store/widgetStore';
-import { useResumeWidgetConversation, useStartWidgetConversation, useVerifyWidgetIdentity } from '../../../hooks/useWidgetQueries';
+import { useResumeWidgetConversation, useStartWidgetConversation, useVerifyWidgetIdentity, useCaptureLead } from '../../../hooks/useWidgetQueries';
 import { MessageSquare, Ticket } from 'lucide-react';
 import { Spinner } from '@easydev/ui';
 
@@ -22,6 +22,7 @@ export default function WidgetWelcomePage() {
   const { data: conversation, isError } = useResumeWidgetConversation();
   const startConversationMutation = useStartWidgetConversation();
   const verifyIdentityMutation = useVerifyWidgetIdentity();
+  const captureLeadMutation = useCaptureLead();
 
   // A disabled query (still waiting on the session bootstrap) reports
   // isLoading: false in TanStack Query v5, so check for "no answer yet"
@@ -55,6 +56,7 @@ export default function WidgetWelcomePage() {
       alert('Please check consent block to continue support.');
       return;
     }
+    captureLeadMutation.mutate({ email, name: name || undefined });
     startConversationMutation.mutate({ email, name: name || undefined });
   };
 

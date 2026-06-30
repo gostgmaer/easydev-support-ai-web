@@ -1,13 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { Globe, Gauge, UserPlus } from 'lucide-react';
-import { useAgentProfiles, useCreateAgentProfile, useUpdateAgentProfile, useDeleteAgentProfile, useProvisionAgentUser } from '../../../hooks/useAdminQueries';
+import { Globe, Gauge, UserPlus, BarChart2, ChevronDown, Clock, CheckCircle, Star, AlertTriangle, Wifi } from 'lucide-react';
+import { useAgentProfiles, useCreateAgentProfile, useUpdateAgentProfile, useDeleteAgentProfile, useProvisionAgentUser, useAgentPerformance, useAgentAvailability, useUpdateAgentAvailability } from '../../../hooks/useAdminQueries';
 
 export default function AgentsPage() {
   const [search, setSearch] = React.useState('');
   const { data: agents, isLoading, isError } = useAgentProfiles(search || undefined);
   const provisionAgentMutation = useProvisionAgentUser();
+  const createAgentMutation = useCreateAgentProfile();
   const [isCreating, setIsCreating] = React.useState(false);
   const [newDisplayName, setNewDisplayName] = React.useState('');
   const [newEmployeeCode, setNewEmployeeCode] = React.useState('');
@@ -163,10 +164,111 @@ export default function AgentsPage() {
   );
 }
 
+function AgentPerformancePanel({ agentId }: { agentId: string }) {
+  const { data, isLoading } = useAgentPerformance(agentId);
+
+  if (isLoading) return <p className="text-[10px] text-neutral-400 py-2 text-center animate-pulse">Loading metrics...</p>;
+  if (!data) return <p className="text-[10px] text-neutral-400 py-2 text-center">No performance data.</p>;
+
+  const resolutionRate = data.totalConversations > 0
+    ? Math.round((data.resolvedConversations / data.totalConversations) * 100)
+    : 0;
+  const avgResponseMin = Math.round(data.averageResponseTimeSeconds / 60);
+  const avgResolutionHr = (data.averageResolutionTimeSeconds / 3600).toFixed(1);
+
+  return (
+    <div className="mt-3 pt-3 border-t border-neutral-100 grid grid-cols-2 gap-2">
+      <div className="p-2 bg-primary-50 border border-primary-100 rounded-md text-center">
+        <span className="text-[9px] uppercase font-bold text-primary-500 flex items-center justify-center gap-1 mb-0.5">
+          <CheckCircle className="h-2.5 w-2.5" /> Resolution
+        </span>
+        <span className="text-sm font-extrabold text-primary-800">{resolutionRate}%</span>
+        <span className="text-[9px] text-primary-400 block">{data.resolvedConversations}/{data.totalConversations}</span>
+      </div>
+      <div className="p-2 bg-neutral-50 border border-neutral-100 rounded-md text-center">
+        <span className="text-[9px] uppercase font-bold text-neutral-400 flex items-center justify-center gap-1 mb-0.5">
+          <Clock className="h-2.5 w-2.5" /> Avg Response
+        </span>
+        <span className="text-sm font-extrabold text-neutral-800">{avgResponseMin}m</span>
+        <span className="text-[9px] text-neutral-400 block">first reply</span>
+      </div>
+      <div className="p-2 bg-neutral-50 border border-neutral-100 rounded-md text-center">
+        <span className="text-[9px] uppercase font-bold text-neutral-400 flex items-center justify-center gap-1 mb-0.5">
+          <Clock className="h-2.5 w-2.5" /> Avg Resolution
+        </span>
+        <span className="text-sm font-extrabold text-neutral-800">{avgResolutionHr}h</span>
+        <span className="text-[9px] text-neutral-400 block">per ticket</span>
+      </div>
+      <div className="p-2 bg-neutral-50 border border-neutral-100 rounded-md text-center">
+        {data.csatScore != null ? (
+          <>
+            <span className="text-[9px] uppercase font-bold text-neutral-400 flex items-center justify-center gap-1 mb-0.5">
+              <Star className="h-2.5 w-2.5" /> CSAT
+            </span>
+            <span className="text-sm font-extrabold text-neutral-800">{data.csatScore.toFixed(1)}</span>
+            <span className="text-[9px] text-neutral-400 block">/ 5.0</span>
+          </>
+        ) : (
+          <>
+            <span className="text-[9px] uppercase font-bold text-danger-400 flex items-center justify-center gap-1 mb-0.5">
+              <AlertTriangle className="h-2.5 w-2.5" /> SLA Breach
+            </span>
+            <span className="text-sm font-extrabold text-danger-700">{Math.round(data.slaBreachRate * 100)}%</span>
+            <span className="text-[9px] text-neutral-400 block">breach rate</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const AVAILABILITY_STATUSES = ['online', 'offline', 'busy', 'away'] as const;
+
+function AgentAvailabilityPanel({ agentId }: { agentId: string }) {
+  const { data, isLoading } = useAgentAvailability(agentId);
+  const updateAvailability = useUpdateAgentAvailability();
+  const [newStatus, setNewStatus] = React.useState('');
+
+  React.useEffect(() => {
+    if (data?.status) setNewStatus(data.status);
+  }, [data?.status]);
+
+  if (isLoading) return <p className="text-[10px] text-neutral-400 py-2 animate-pulse">Loading availability...</p>;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-neutral-100 space-y-2">
+      <p className="text-[10px] font-bold uppercase text-neutral-500">Availability</p>
+      <div className="flex items-center gap-2">
+        <select
+          value={newStatus}
+          onChange={(e) => setNewStatus(e.target.value)}
+          className="border border-neutral-200 rounded p-1 text-xs bg-white flex-1"
+        >
+          {AVAILABILITY_STATUSES.map((s) => (
+            <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+          ))}
+        </select>
+        <button
+          disabled={updateAvailability.isPending || newStatus === data?.status}
+          onClick={() => updateAvailability.mutate({ agentProfileId: agentId, status: newStatus })}
+          className="text-[10px] font-bold bg-neutral-800 text-white rounded px-2 py-1 disabled:opacity-50 hover:bg-neutral-900"
+        >
+          {updateAvailability.isPending ? '…' : 'Save'}
+        </button>
+      </div>
+      {data?.timezone && (
+        <p className="text-[10px] text-neutral-400">Timezone: {data.timezone}</p>
+      )}
+    </div>
+  );
+}
+
 function AgentCard({ agent }: { agent: any }) {
   const updateAgentMutation = useUpdateAgentProfile();
   const deleteAgentMutation = useDeleteAgentProfile();
   const [isEditing, setIsEditing] = React.useState(false);
+  const [showPerformance, setShowPerformance] = React.useState(false);
+  const [showAvailability, setShowAvailability] = React.useState(false);
   const [editForm, setEditForm] = React.useState({
     displayName: agent.displayName,
     employeeCode: agent.employeeCode || '',
@@ -237,7 +339,7 @@ function AgentCard({ agent }: { agent: any }) {
               )}
             </div>
           </div>
-          <span className={\	ext-[9px] uppercase font-black px-1.5 py-0.5 rounded shrink-0 \\}>
+          <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded shrink-0">
             {agent.status}
           </span>
         </div>
@@ -265,6 +367,24 @@ function AgentCard({ agent }: { agent: any }) {
             <button onClick={handleDelete} className="text-[10px] text-danger hover:underline">Delete</button>
           </div>
         </div>
+        <button
+          onClick={() => setShowPerformance((v) => !v)}
+          className="mt-3 flex w-full items-center justify-center gap-1 text-[10px] font-semibold text-neutral-500 hover:text-neutral-700 border-t border-neutral-100 pt-3 transition-colors"
+        >
+          <BarChart2 className="h-3 w-3" />
+          Performance metrics
+          <ChevronDown className={`h-3 w-3 transition-transform ${showPerformance ? 'rotate-180' : ''}`} />
+        </button>
+        {showPerformance && <AgentPerformancePanel agentId={agent.id} />}
+        <button
+          onClick={() => setShowAvailability((v) => !v)}
+          className="mt-2 flex w-full items-center justify-center gap-1 text-[10px] font-semibold text-neutral-500 hover:text-neutral-700 border-t border-neutral-100 pt-2 transition-colors"
+        >
+          <Wifi className="h-3 w-3" />
+          Availability
+          <ChevronDown className={`h-3 w-3 transition-transform ${showAvailability ? 'rotate-180' : ''}`} />
+        </button>
+        {showAvailability && <AgentAvailabilityPanel agentId={agent.id} />}
       </div>
     </div>
   );

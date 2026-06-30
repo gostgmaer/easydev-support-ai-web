@@ -2,8 +2,9 @@
 
 import * as React from 'react';
 import { Mail, MessageSquare, Phone, Webhook, MessageCircle, Send, Users, Settings, CheckCircle2, AlertTriangle, Trash2, Plus, Key } from 'lucide-react';
-import { 
-  useChannelsList, 
+import {
+  useChannelsList,
+  useCreateChannel,
   useSetChannelEnabled,
   useChannelConfig,
   useSaveChannelConfig,
@@ -12,7 +13,9 @@ import {
   useCheckChannelHealth,
   useChannelTemplates,
   useCreateChannelTemplate,
-  useDeleteChannelTemplate 
+  useDeleteChannelTemplate,
+  useChannelSettingsByType,
+  useUpdateChannelSettingsByType,
 } from '@/hooks/useAdminQueries';
 import type { CommunicationChannel } from '@/store/adminStore';
 
@@ -28,19 +31,125 @@ const CHANNEL_ICON: Record<CommunicationChannel['type'], React.ComponentType<{ c
   VOICE: Phone,
 };
 
+const CHANNEL_TYPES = ['EMAIL', 'WHATSAPP', 'WEBCHAT', 'TELEGRAM', 'FACEBOOK', 'INSTAGRAM', 'SLACK', 'TEAMS', 'VOICE'] as const;
+
+function CreateChannelDialog({ onClose }: { onClose: () => void }) {
+  const createMutation = useCreateChannel();
+  const [name, setName] = React.useState('');
+  const [channelType, setChannelType] = React.useState<string>('EMAIL');
+  const [description, setDescription] = React.useState('');
+  const [configJson, setConfigJson] = React.useState('{}');
+  const [jsonError, setJsonError] = React.useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    let config: Record<string, unknown> | undefined;
+    try {
+      const parsed = JSON.parse(configJson);
+      config = Object.keys(parsed).length > 0 ? parsed : undefined;
+      setJsonError('');
+    } catch {
+      setJsonError('Invalid JSON in configuration');
+      return;
+    }
+    createMutation.mutate(
+      { name: name.trim(), channelType, description: description.trim() || undefined, config },
+      { onSuccess: onClose },
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/50 backdrop-blur-sm p-6">
+      <div className="w-full max-w-md rounded-lg bg-white shadow-xl overflow-hidden">
+        <div className="p-4 border-b border-neutral-100 flex items-center justify-between">
+          <h3 className="font-bold text-neutral-800">Create Channel</h3>
+          <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-4 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-neutral-700 mb-1">Channel Name *</label>
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Support Email"
+              className="w-full rounded border border-neutral-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-neutral-700 mb-1">Type *</label>
+            <select
+              value={channelType}
+              onChange={(e) => setChannelType(e.target.value)}
+              className="w-full rounded border border-neutral-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {CHANNEL_TYPES.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-neutral-700 mb-1">Description</label>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional description"
+              className="w-full rounded border border-neutral-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-neutral-700 mb-1">Initial Configuration (JSON)</label>
+            <textarea
+              value={configJson}
+              onChange={(e) => setConfigJson(e.target.value)}
+              rows={3}
+              className="w-full rounded border border-neutral-200 p-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            {jsonError && <p className="text-danger text-[11px] mt-1">{jsonError}</p>}
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:bg-neutral-100 rounded">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="px-4 py-2 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded disabled:opacity-50"
+            >
+              {createMutation.isPending ? 'Creating...' : 'Create Channel'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function ChannelsPage() {
   const { data: channels = [], isLoading } = useChannelsList();
   const setEnabledMutation = useSetChannelEnabled();
   const [expandedChannelId, setExpandedChannelId] = React.useState<string | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = React.useState(false);
 
   return (
     <div className="space-y-6" role="region" aria-label="Customer Channels List">
+      {showCreateDialog && <CreateChannelDialog onClose={() => setShowCreateDialog(false)} />}
+
       {/* Header */}
       <div className="flex justify-between items-center bg-white border border-neutral-200 rounded-lg p-6 shadow-xs">
         <div>
           <h1 className="text-base font-bold text-neutral-900">Communication Channels</h1>
           <p className="text-xs text-neutral-500">Manage messaging integrations connected to this tenant.</p>
         </div>
+        <button
+          onClick={() => setShowCreateDialog(true)}
+          className="flex items-center gap-1.5 rounded bg-primary-600 hover:bg-primary-700 px-3 py-2 text-xs font-bold text-white transition"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Create Channel
+        </button>
       </div>
 
       {/* Grid of channels */}
@@ -95,7 +204,7 @@ export default function ChannelsPage() {
                 </div>
                 
                 {expandedChannelId === chan.id && (
-                  <ChannelConfiguration channelId={chan.id} />
+                  <ChannelConfiguration channelId={chan.id} channelType={chan.type} />
                 )}
               </div>
             );
@@ -110,13 +219,59 @@ export default function ChannelsPage() {
   );
 }
 
-function ChannelConfiguration({ channelId }: { channelId: string }) {
-  const [tab, setTab] = React.useState<'config' | 'health' | 'templates'>('config');
+function ChannelTypeSettingsTab({ channelType }: { channelType: string }) {
+  const { data: settings, isLoading } = useChannelSettingsByType(channelType);
+  const updateMutation = useUpdateChannelSettingsByType();
+  const [form, setForm] = React.useState<{ businessHoursOnly: boolean; autoAssignmentEnabled: boolean }>({ businessHoursOnly: false, autoAssignmentEnabled: false });
+
+  React.useEffect(() => {
+    if (settings) {
+      setForm({ businessHoursOnly: settings.businessHoursOnly, autoAssignmentEnabled: settings.autoAssignmentEnabled });
+    }
+  }, [settings]);
+
+  if (isLoading) return <p className="text-xs text-neutral-400">Loading type settings…</p>;
+
+  return (
+    <div className="space-y-3 text-xs">
+      <p className="text-neutral-500">Settings that apply to all <span className="font-bold">{channelType}</span> channels on this tenant.</p>
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.businessHoursOnly}
+          onChange={(e) => setForm({ ...form, businessHoursOnly: e.target.checked })}
+          className="accent-primary-600 h-3.5 w-3.5"
+        />
+        <span>Business Hours Only</span>
+      </label>
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.autoAssignmentEnabled}
+          onChange={(e) => setForm({ ...form, autoAssignmentEnabled: e.target.checked })}
+          className="accent-primary-600 h-3.5 w-3.5"
+        />
+        <span>Auto Assignment Enabled</span>
+      </label>
+      <button
+        onClick={() => updateMutation.mutate({ channelType, enabled: settings?.enabled ?? true, ...form })}
+        disabled={updateMutation.isPending}
+        className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-1.5 px-3 rounded disabled:opacity-50"
+      >
+        {updateMutation.isPending ? 'Saving…' : 'Save Type Settings'}
+      </button>
+      {updateMutation.isSuccess && <p className="text-success">Saved.</p>}
+    </div>
+  );
+}
+
+function ChannelConfiguration({ channelId, channelType }: { channelId: string; channelType: string }) {
+  const [tab, setTab] = React.useState<'config' | 'health' | 'templates' | 'type-settings'>('config');
 
   return (
     <div className="border-t border-neutral-200 pt-4 mt-2 space-y-4">
-      <div className="flex gap-2">
-        {(['config', 'health', 'templates'] as const).map((t) => (
+      <div className="flex gap-2 flex-wrap">
+        {(['config', 'health', 'templates', 'type-settings'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -124,14 +279,15 @@ function ChannelConfiguration({ channelId }: { channelId: string }) {
               tab === t ? 'bg-primary-50 text-primary-600' : 'text-neutral-500 hover:bg-neutral-100'
             }`}
           >
-            {t}
+            {t === 'type-settings' ? 'Type Settings' : t}
           </button>
         ))}
       </div>
-      
+
       {tab === 'config' && <ChannelConfigTab channelId={channelId} />}
       {tab === 'health' && <ChannelHealthTab channelId={channelId} />}
       {tab === 'templates' && <ChannelTemplatesTab channelId={channelId} />}
+      {tab === 'type-settings' && <ChannelTypeSettingsTab channelType={channelType} />}
     </div>
   );
 }

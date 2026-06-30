@@ -457,6 +457,28 @@ export interface ChannelSettings {
 export const useChannelSettings = settingsQuery<ChannelSettings[]>('channels', '/v1/settings/channels');
 export const useUpdateChannelSettings = settingsMutation<ChannelSettings>('channels', '/v1/settings/channels', 'put');
 
+export function useChannelSettingsByType(channelType: string | null) {
+  const apiClient = useApiClient();
+  return useQuery<ChannelSettings>({
+    queryKey: ['admin', 'settings', 'channels', channelType],
+    queryFn: () => apiClient.get<ChannelSettings>(`/v1/settings/channels/${channelType}`),
+    enabled: !!channelType,
+  });
+}
+
+export function useUpdateChannelSettingsByType() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelType, ...dto }: ChannelSettings) =>
+      apiClient.put<ChannelSettings>(`/v1/settings/channels/${channelType}`, dto),
+    onSuccess: (_d, v) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'channels', v.channelType] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'channels'] });
+    },
+  });
+}
+
 // 5. INCIDENTS & HEALTH
 export function useIncidentsAlerts() {
   const apiClient = useApiClient();
@@ -616,6 +638,29 @@ export function useDeleteAgentProfile() {
   });
 }
 
+export interface AgentPerformanceMetrics {
+  agentId: string;
+  totalConversations: number;
+  resolvedConversations: number;
+  averageResponseTimeSeconds: number;
+  averageResolutionTimeSeconds: number;
+  csatScore?: number;
+  slaBreachRate: number;
+  period: { from: string; to: string };
+}
+
+export function useAgentPerformance(agentId: string | null, period?: { from: string; to: string }) {
+  const apiClient = useApiClient();
+  return useQuery<AgentPerformanceMetrics>({
+    queryKey: ['admin', 'agents', agentId, 'performance', period],
+    queryFn: () =>
+      apiClient.get<AgentPerformanceMetrics>(`/v1/admin/agents/${agentId}/performance`, {
+        query: period as Record<string, string> | undefined,
+      }),
+    enabled: !!agentId,
+  });
+}
+
 export function useAddTeamAgent() {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
@@ -655,6 +700,43 @@ export function useRemoveTeamAgent() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'teams'] });
     },
+  });
+}
+
+export function useTransferTeamConversations() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, toTeamId }: { teamId: string; toTeamId: string }) =>
+      apiClient.post<{ transferred: number }>(`/v1/teams/${teamId}/transfer`, { toTeamId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'teams'] }),
+  });
+}
+
+export interface AgentAvailability {
+  agentProfileId: string;
+  status: string;
+  timezone?: string;
+  schedule?: Record<string, unknown>;
+}
+
+export function useAgentAvailability(agentProfileId: string | null) {
+  const apiClient = useApiClient();
+  return useQuery<AgentAvailability>({
+    queryKey: ['admin', 'availability', agentProfileId],
+    queryFn: () => apiClient.get<AgentAvailability>(`/v1/availability/${agentProfileId}`),
+    enabled: !!agentProfileId,
+  });
+}
+
+export function useUpdateAgentAvailability() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ agentProfileId, ...dto }: Partial<AgentAvailability> & { agentProfileId: string }) =>
+      apiClient.put<AgentAvailability>(`/v1/availability/${agentProfileId}`, dto),
+    onSuccess: (_, { agentProfileId }) =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'availability', agentProfileId] }),
   });
 }
 
@@ -1075,6 +1157,46 @@ export function useRotateWidgetIdentitySecret() {
   });
 }
 
+// ─── WIDGET INSTALLATIONS ─────────────────────────────────────────────────────
+
+export interface WidgetInstallation {
+  id: string;
+  name: string;
+  domain: string;
+  allowedOrigins?: string[];
+  createdAt: string;
+}
+
+export function useWidgetInstallations() {
+  const apiClient = useApiClient();
+  return useQuery<WidgetInstallation[]>({
+    queryKey: ['admin', 'widget-installations'],
+    queryFn: () => apiClient.get<WidgetInstallation[]>('/v1/widget/installations'),
+  });
+}
+
+export function useCreateWidgetInstallation() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; domain: string; allowedOrigins?: string[] }) =>
+      apiClient.post<WidgetInstallation>('/v1/widget/installations', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'widget-installations'] }),
+  });
+}
+
+export function useWidgetInstallationScript(installationId: string | null) {
+  const apiClient = useApiClient();
+  return useQuery<{ script: string; installationId: string }>({
+    queryKey: ['admin', 'widget-installations', installationId, 'script'],
+    queryFn: () =>
+      apiClient.get<{ script: string; installationId: string }>('/v1/widget/installations/script', {
+        query: { installationId: installationId! },
+      }),
+    enabled: !!installationId,
+  });
+}
+
 // 11. WEBHOOKS
 export function useWebhooks() {
   const apiClient = useApiClient();
@@ -1314,6 +1436,34 @@ export function useDeleteAiAgent() {
   return useMutation({
     mutationFn: (id: string) => apiClient.delete<void>(`/v1/ai-agents/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'ai-agents'] }),
+  });
+}
+
+// ─── AI ESCALATIONS (ADMIN VIEW) ──────────────────────────────────────────────
+
+export interface AiEscalation {
+  id: string;
+  conversationId: string;
+  reason: string;
+  status: 'pending' | 'resolved';
+  createdAt: string;
+}
+
+export function useAdminAiEscalations(status?: string) {
+  const apiClient = useApiClient();
+  return useQuery<AiEscalation[]>({
+    queryKey: ['admin', 'ai-escalations', status],
+    queryFn: () => apiClient.get<AiEscalation[]>('/v1/ai-escalations', { query: status ? { status } : undefined }),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useResolveAdminAiEscalation() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<AiEscalation>(`/v1/ai-escalations/${id}/resolve`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'ai-escalations'] }),
   });
 }
 
@@ -2032,6 +2182,16 @@ export function useImportConnectorOpenApi() {
   });
 }
 
+export function useImportConnectorSwagger() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { url?: string; spec?: string; name: string }) =>
+      apiClient.post<Connector>('/v1/connectors/import/swagger', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'connectors'] }),
+  });
+}
+
 export function useMapConnectorCapabilities() {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
@@ -2336,6 +2496,7 @@ export interface AdminCustomer {
   externalId?: string;
   status: string;
   segmentIds: string[];
+  attributes?: Record<string, unknown>;
   createdAt: string;
 }
 
@@ -2408,6 +2569,16 @@ export function useExportCustomers() {
   });
 }
 
+export function useMergeCustomers() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ primaryId, duplicateId }: { primaryId: string; duplicateId: string }) =>
+      apiClient.post<AdminCustomer>('/v1/customers/merge', { primaryId, duplicateId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customers'] }),
+  });
+}
+
 export function useAdminCustomerTimeline(customerId: string | undefined) {
   const apiClient = useApiClient();
   return useQuery<{ type: string; data: Record<string, unknown>; createdAt: string }[]>({
@@ -2420,32 +2591,7 @@ export function useAdminCustomerTimeline(customerId: string | undefined) {
   });
 }
 
-export function useCustomerSegments() {
-  const apiClient = useApiClient();
-  return useQuery<CustomerSegment[]>({
-    queryKey: ['admin', 'customer-segments'],
-    queryFn: () => apiClient.get<CustomerSegment[]>('/v1/customer-segments'),
-  });
-}
 
-export function useCreateCustomerSegment() {
-  const apiClient = useApiClient();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (dto: { name: string; description?: string; rules?: Record<string, unknown> }) =>
-      apiClient.post<CustomerSegment>('/v1/customer-segments', dto),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] }),
-  });
-}
-
-export function useDeleteCustomerSegment() {
-  const apiClient = useApiClient();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiClient.delete<void>(`/v1/customer-segments/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] }),
-  });
-}
 
 // ─── SETTINGS — EXTENDED ─────────────────────────────────────────────────────
 
@@ -2497,6 +2643,216 @@ export function useDeleteFeatureFlag() {
   });
 }
 
+// ─── CUSTOMER BULK IMPORT ─────────────────────────────────────────────────────
+
+export function useBulkImportCustomers() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (records: Array<{ name?: string; email?: string; phone?: string; externalId?: string; attributes?: Record<string, unknown> }>) =>
+      apiClient.post<{ imported: number; errors: Array<{ row: number; message: string }> }>('/v1/customers/bulk-import', { records }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customers'] }),
+  });
+}
+
+// ─── MESSAGE TEMPLATES (ADMIN CRUD) ──────────────────────────────────────────
+
+export interface MessageTemplate {
+  id: string;
+  name: string;
+  channelType?: string;
+  category?: string;
+  content: string;
+  contentHtml?: string;
+  variables?: Record<string, unknown>;
+  language?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function useAdminMessageTemplates(category?: string) {
+  const apiClient = useApiClient();
+  return useQuery<{ data: MessageTemplate[]; total: number }>({
+    queryKey: ['admin', 'message-templates', category],
+    queryFn: () =>
+      apiClient.get<{ data: MessageTemplate[]; total: number }>('/v1/message-templates', {
+        query: category ? { category } : undefined,
+      }),
+  });
+}
+
+export function useAdminMessageTemplateById(id: string | null) {
+  const apiClient = useApiClient();
+  return useQuery<MessageTemplate>({
+    queryKey: ['admin', 'message-templates', id],
+    queryFn: () => apiClient.get<MessageTemplate>(`/v1/message-templates/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateAdminMessageTemplate() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; content: string; channelType?: string; category?: string; contentHtml?: string; variables?: Record<string, unknown>; language?: string; isActive?: boolean }) =>
+      apiClient.post<MessageTemplate>('/v1/message-templates', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'message-templates'] }),
+  });
+}
+
+export function useUpdateAdminMessageTemplate() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: Partial<MessageTemplate> & { id: string }) =>
+      apiClient.put<MessageTemplate>(`/v1/message-templates/${id}`, dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'message-templates'] }),
+  });
+}
+
+export function useDeleteAdminMessageTemplate() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/message-templates/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'message-templates'] }),
+  });
+}
+
+// ─── ADMIN DASHBOARDS ─────────────────────────────────────────────────────────
+
+export interface AdminDashboard {
+  id: string;
+  name: string;
+  description?: string;
+  isDefault?: boolean;
+  createdAt: string;
+}
+
+export interface AdminAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  isActive: boolean;
+  createdAt: string;
+  expiresAt?: string;
+}
+
+export function useAdminDashboards() {
+  const apiClient = useApiClient();
+  return useQuery<AdminDashboard[]>({
+    queryKey: ['admin', 'dashboards'],
+    queryFn: () => apiClient.get<AdminDashboard[]>('/v1/admin/dashboards'),
+  });
+}
+
+export function useAdminDefaultDashboard() {
+  const apiClient = useApiClient();
+  return useQuery<AdminDashboard>({
+    queryKey: ['admin', 'dashboards', 'default'],
+    queryFn: () => apiClient.get<AdminDashboard>('/v1/admin/dashboards/default'),
+  });
+}
+
+export function useAdminAnnouncements() {
+  const apiClient = useApiClient();
+  return useQuery<AdminAnnouncement[]>({
+    queryKey: ['admin', 'dashboards', 'announcements'],
+    queryFn: () => apiClient.get<AdminAnnouncement[]>('/v1/admin/dashboards/announcements'),
+  });
+}
+
+export function useCreateAdminAnnouncement() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { title: string; message: string; expiresAt?: string }) =>
+      apiClient.post<AdminAnnouncement>('/v1/admin/dashboards/announcements', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'dashboards', 'announcements'] }),
+  });
+}
+
+export function useDeactivateAdminAnnouncement() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<void>(`/v1/admin/dashboards/announcements/${id}/deactivate`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'dashboards', 'announcements'] }),
+  });
+}
+
+// ─── DASHBOARD CRUD & WIDGETS ─────────────────────────────────────────────────
+
+export function useCreateAdminDashboard() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; description?: string; isDefault?: boolean }) =>
+      apiClient.post<AdminDashboard>('/v1/admin/dashboards', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'dashboards'] }),
+  });
+}
+
+export function useUpdateAdminDashboard() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: { id: string; name?: string; description?: string; isDefault?: boolean }) =>
+      apiClient.patch<AdminDashboard>(`/v1/admin/dashboards/${id}`, dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'dashboards'] }),
+  });
+}
+
+export function useDeleteAdminDashboard() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/admin/dashboards/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'dashboards'] }),
+  });
+}
+
+export interface AdminDashboardWidget {
+  id: string;
+  dashboardId: string;
+  type: string;
+  title?: string;
+  config?: Record<string, unknown>;
+  position?: { x: number; y: number; w: number; h: number };
+}
+
+export function useAdminDashboardWidgets(dashboardId: string | null) {
+  const apiClient = useApiClient();
+  return useQuery<AdminDashboardWidget[]>({
+    queryKey: ['admin', 'dashboards', dashboardId, 'widgets'],
+    queryFn: () => apiClient.get<AdminDashboardWidget[]>(`/v1/admin/dashboards/${dashboardId}/widgets`),
+    enabled: !!dashboardId,
+  });
+}
+
+export function useCreateDashboardWidget() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dashboardId, ...dto }: { dashboardId: string; type: string; title?: string; config?: Record<string, unknown> }) =>
+      apiClient.post<AdminDashboardWidget>(`/v1/admin/dashboards/${dashboardId}/widgets`, dto),
+    onSuccess: (_, { dashboardId }) =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'dashboards', dashboardId, 'widgets'] }),
+  });
+}
+
+export function useDeleteDashboardWidget() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ widgetId }: { widgetId: string; dashboardId: string }) =>
+      apiClient.delete<void>(`/v1/admin/dashboards/widgets/${widgetId}`),
+    onSuccess: (_, { dashboardId }) =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'dashboards', dashboardId, 'widgets'] }),
+  });
+}
+
 // ─── HARDENING ────────────────────────────────────────────────────────────────
 
 export function useHardeningCost() {
@@ -2512,5 +2868,90 @@ export function useReplayOutbox() {
   const apiClient = useApiClient();
   return useMutation({
     mutationFn: () => apiClient.post<{ replayed: number }>('/v1/hardening/outbox/replay'),
+  });
+}
+
+// ─── CUSTOMER SEGMENTS ────────────────────────────────────────────────────────
+
+export interface CustomerSegment {
+  id: string;
+  name: string;
+  description?: string;
+  type: 'static' | 'dynamic';
+  rules?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export function useCustomerSegments() {
+  const apiClient = useApiClient();
+  return useQuery<CustomerSegment[]>({
+    queryKey: ['admin', 'segments'],
+    queryFn: () => apiClient.get<CustomerSegment[]>('/v1/customer-segments'),
+  });
+}
+
+export function useCreateCustomerSegment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; description?: string; type: 'static' | 'dynamic'; rules?: Record<string, unknown> }) =>
+      apiClient.post<CustomerSegment>('/v1/customer-segments', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'segments'] }),
+  });
+}
+
+export function useUpdateCustomerSegment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: { id: string; name?: string; description?: string; rules?: Record<string, unknown> }) =>
+      apiClient.put<CustomerSegment>(`/v1/customer-segments/${id}`, dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'segments'] }),
+  });
+}
+
+export function useDeleteCustomerSegment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/v1/customer-segments/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'segments'] }),
+  });
+}
+
+export function useAssignCustomerToSegment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ segmentId, customerId }: { segmentId: string; customerId: string }) =>
+      apiClient.post<{ success: boolean }>(`/v1/customer-segments/${segmentId}/assign`, { customerId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'segments'] }),
+  });
+}
+
+export function useRemoveCustomerFromSegment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ segmentId, customerId }: { segmentId: string; customerId: string }) =>
+      apiClient.post<{ success: boolean }>(`/v1/customer-segments/${segmentId}/remove`, { customerId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'segments'] }),
+  });
+}
+
+export function useEvaluateSegment() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: (segmentId: string) =>
+      apiClient.post<{ success: boolean }>(`/v1/customer-segments/${segmentId}/evaluate`),
+  });
+}
+
+export function useSegmentMembers(segmentId: string | null) {
+  const apiClient = useApiClient();
+  return useQuery<{ id: string; email?: string; name?: string }[]>({
+    queryKey: ['admin', 'segments', segmentId, 'members'],
+    queryFn: () => apiClient.get<{ id: string; email?: string; name?: string }[]>(`/v1/customer-segments/${segmentId}/members`),
+    enabled: !!segmentId,
   });
 }

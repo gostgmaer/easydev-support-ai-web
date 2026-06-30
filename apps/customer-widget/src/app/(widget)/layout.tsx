@@ -6,12 +6,13 @@ import { usePathname } from 'next/navigation';
 import { MessageCircle, FileQuestion, StickyNote, History } from 'lucide-react';
 import { Avatar } from '@easydev/ui';
 import { useWidgetStore } from '../../store/widgetStore';
-import { useEnsureWidgetSession, useWidgetBranding } from '../../hooks/useWidgetQueries';
+import { useEnsureWidgetSession, useWidgetBranding, useTrackWidgetPageView, useEndWidgetSession } from '../../hooks/useWidgetQueries';
 
 export default function WidgetWindowLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const config = useWidgetStore((state) => state.config);
   const sessionToken = useWidgetStore((state) => state.sessionToken);
+  const sessionId = useWidgetStore((state) => state.widgetSessionId);
   // Public, no session token required - loads independently of (and usually
   // before) the session bootstrap below so real tenant branding shows up
   // immediately instead of the generic local defaults the whole time.
@@ -22,6 +23,38 @@ export default function WidgetWindowLayout({ children }: { children: React.React
   // domains and this page wasn't loaded from one of them - surface that
   // instead of leaving the visitor staring at an infinite spinner.
   const { isError: sessionFailed } = useEnsureWidgetSession();
+  const trackPageView = useTrackWidgetPageView();
+  const endSession = useEndWidgetSession();
+
+  // Fire session-end when the visitor closes the tab or navigates away.
+  // We use 'pagehide' (covers mobile) and 'beforeunload' (covers desktop).
+  React.useEffect(() => {
+    const handleEnd = () => {
+      if (sessionId) {
+        endSession.mutate(sessionId);
+      }
+    };
+    window.addEventListener('pagehide', handleEnd);
+    window.addEventListener('beforeunload', handleEnd);
+    return () => {
+      window.removeEventListener('pagehide', handleEnd);
+      window.removeEventListener('beforeunload', handleEnd);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  // Fire a page-view event to the backend each time the visitor navigates
+  // within the widget (route changes). Only fires once a session exists.
+  React.useEffect(() => {
+    if (!sessionId) return;
+    trackPageView.mutate({
+      sessionId,
+      url: typeof window !== 'undefined' ? window.location.href : pathname,
+      title: typeof document !== 'undefined' ? document.title : pathname,
+    });
+    // trackPageView.mutate is stable (mutation objects are stable references)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, sessionId]);
 
   const navItems = [
     { label: 'Home', href: '/widget', icon: MessageCircle },

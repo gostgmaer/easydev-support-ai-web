@@ -1,11 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AlarmClock, Bookmark, Bot, Clock, Sparkles } from 'lucide-react';
+import { AlarmClock, Bookmark, Bot, CheckCircle2, Clock, Sparkles, XCircle, Search, X as XIcon } from 'lucide-react';
 import { useAuth } from '@easydev/auth';
 import { useHasPermission } from '@easydev/permissions';
 import { ConversationCard, BulkActions, NoConversationsEmptyState, InboxLoading, ApiErrorState, type BulkAction } from '@easydev/ui';
 import { useInboxStore } from '../store/inboxStore';
-import { useAssignConversation, useBookmarkedConversationIds, useToggleBookmark, useToggleSnooze } from '../hooks/useQueries';
+import { useBulkAssign, useBulkResolveConversations, useBulkCloseConversations, useBulkTagConversations, useBookmarkedConversationIds, useToggleBookmark, useToggleSnooze, useSearchMessages } from '../hooks/useQueries';
 import { toConversationSummary } from '../lib/ui-adapters';
 import { Conversation } from '../types';
 
@@ -110,6 +110,9 @@ const ConversationRow = React.memo(function ConversationRow({
 
 export function InboxList({ isLoading, isError, onRetry, hasMore, isFetchingMore, onLoadMore }: InboxListProps) {
   const { user } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const { data: searchResults = [], isFetching: isSearching } = useSearchMessages(searchQuery);
   const conversations = useInboxStore((state) => state.conversations);
   const selectedView = useInboxStore((state) => state.selectedView);
   const selectedConversationIds = useInboxStore((state) => state.selectedConversationIds);
@@ -124,8 +127,12 @@ export function InboxList({ isLoading, isError, onRetry, hasMore, isFetchingMore
   const toggleBookmarkMutation = useToggleBookmark();
   const toggleSnoozeMutation = useToggleSnooze();
 
-  const assignMutation = useAssignConversation();
+  const bulkAssignMutation = useBulkAssign();
+  const bulkResolveMutation = useBulkResolveConversations();
+  const bulkCloseMutation = useBulkCloseConversations();
+  const bulkTagMutation = useBulkTagConversations();
   const canAssign = useHasPermission('conversation', 'assign');
+  const canResolve = useHasPermission('conversation', 'resolve');
   const parentRef = useRef<HTMLDivElement>(null);
 
   const rowVirtualizer = useVirtualizer({
@@ -151,8 +158,10 @@ export function InboxList({ isLoading, isError, onRetry, hasMore, isFetchingMore
             label: 'Claim selected',
             onAction: (selected: Conversation[]) => {
               if (!user) return;
-              selected.forEach((c) => assignMutation.mutate({ conversationId: c.id, agentId: user.id }));
-              clearSelection();
+              bulkAssignMutation.mutate(
+                { conversationIds: selected.map((c) => c.id), agentProfileId: user.id },
+                { onSuccess: clearSelection },
+              );
             },
           },
         ]
@@ -168,6 +177,43 @@ export function InboxList({ isLoading, isError, onRetry, hasMore, isFetchingMore
         clearSelection();
       },
     },
+    {
+      id: 'snooze',
+      label: 'Snooze selected',
+      icon: <AlarmClock className="h-3.5 w-3.5" />,
+      onAction: (selected) => {
+        selected.forEach((c) =>
+          toggleSnoozeMutation.mutate({ conversationId: c.id, snoozed: false }),
+        );
+        clearSelection();
+      },
+    },
+    ...(canResolve
+      ? [
+          {
+            id: 'resolve',
+            label: 'Resolve selected',
+            icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+            onAction: (selected: Conversation[]) => {
+              bulkResolveMutation.mutate(
+                selected.map((c) => c.id),
+                { onSuccess: clearSelection },
+              );
+            },
+          },
+          {
+            id: 'close',
+            label: 'Close selected',
+            icon: <XCircle className="h-3.5 w-3.5" />,
+            onAction: (selected: Conversation[]) => {
+              bulkCloseMutation.mutate(
+                { conversationIds: selected.map((c) => c.id) },
+                { onSuccess: clearSelection },
+              );
+            },
+          },
+        ]
+      : []),
   ];
 
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -182,67 +228,123 @@ export function InboxList({ isLoading, isError, onRetry, hasMore, isFetchingMore
     <div className="flex flex-col h-full bg-gradient-to-b from-white to-neutral-50/30">
       {/* Header & Bulk Actions Toolbar */}
       <div className="px-4 py-3 border-b border-neutral-200/60 flex flex-col gap-2 bg-gradient-to-r from-neutral-50/50 to-transparent">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-500">
-            {selectedView} Inbox ({conversations.length})
-          </h2>
-          <input
-            type="checkbox"
-            checked={isAllSelected}
-            onChange={toggleSelectAll}
-            className="h-4 w-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500 focus:ring-offset-1 cursor-pointer"
-            aria-label="Select all conversations"
-          />
+        <div className="flex items-center justify-between gap-2">
+          {searchOpen ? (
+            <div className="flex items-center gap-1.5 flex-1 rounded border border-neutral-200 bg-white px-2 py-1 focus-within:ring-2 focus-within:ring-primary-500">
+              <Search className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
+              <input
+                autoFocus
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search messages…"
+                className="flex-1 text-xs outline-none bg-transparent"
+                aria-label="Search messages"
+              />
+              {searchQuery && (
+                <button type="button" onClick={() => setSearchQuery('')} className="text-neutral-300 hover:text-neutral-500">
+                  <XIcon className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-500 flex-1">
+              {selectedView} Inbox ({conversations.length})
+            </h2>
+          )}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => { setSearchOpen((v) => !v); setSearchQuery(''); }}
+              className={`p-1 rounded hover:bg-neutral-100 ${searchOpen ? 'text-primary-600' : 'text-neutral-400'}`}
+              aria-label={searchOpen ? 'Close search' : 'Search messages'}
+            >
+              {searchOpen ? <XIcon className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+            </button>
+            {!searchOpen && (
+              <input
+                type="checkbox"
+                checked={isAllSelected}
+                onChange={toggleSelectAll}
+                className="h-4 w-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500 focus:ring-offset-1 cursor-pointer"
+                aria-label="Select all conversations"
+              />
+            )}
+          </div>
         </div>
-        <BulkActions selected={selectedConversations} actions={bulkActions} onClearSelection={clearSelection} />
+        {!searchOpen && <BulkActions selected={selectedConversations} actions={bulkActions} onClearSelection={clearSelection} />}
       </div>
 
-      {/* Conversation List Scroll Area */}
-      {isLoading ? (
-        <InboxLoading />
-      ) : isError ? (
-        <ApiErrorState
-          title="Couldn't load this inbox"
-          description="The conversation list failed to load. Please try again."
-          onRetry={onRetry}
-        />
-      ) : conversations.length === 0 ? (
-        <NoConversationsEmptyState />
-      ) : (
-        <div
-          ref={parentRef}
-          className="flex-1 overflow-y-auto"
-          role="listbox"
-          aria-label="Conversation list"
-          onScroll={handleScroll}
-        >
-          <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const conv = conversations[virtualRow.index];
-              return (
-                <ConversationRow
-                  key={conv.id}
-                  conversation={conv}
-                  isSelected={selectedConversationIds.includes(conv.id)}
-                  isActive={activeConversationId === conv.id}
-                  isBookmarked={bookmarkedIds.has(conv.id)}
-                  top={virtualRow.start}
-                  onToggleSelect={() => toggleSelectConversation(conv.id)}
-                  onToggleBookmark={() =>
-                    toggleBookmarkMutation.mutate({ conversationId: conv.id, bookmarked: bookmarkedIds.has(conv.id) })
-                  }
-                  onToggleSnooze={() =>
-                    toggleSnoozeMutation.mutate({ conversationId: conv.id, snoozed: conv.status === 'snoozed' })
-                  }
-                  onOpen={() => setActiveConversationId(conv.id)}
-                />
-              );
-            })}
-          </div>
-          {isFetchingMore && (
-            <div className="py-3 text-center text-xs font-semibold text-neutral-400">Loading more…</div>
+      {/* Message search results overlay */}
+      {searchOpen && searchQuery.length >= 2 && (
+        <div className="flex-1 overflow-y-auto divide-y divide-neutral-100">
+          {isSearching && <p className="p-3 text-xs text-neutral-400 animate-pulse">Searching…</p>}
+          {!isSearching && searchResults.length === 0 && (
+            <p className="p-4 text-center text-xs text-neutral-400 italic">No messages match "{searchQuery}".</p>
           )}
+          {searchResults.map((msg) => (
+            <button
+              key={msg.id}
+              type="button"
+              onClick={() => { setActiveConversationId(msg.conversationId); setSearchOpen(false); setSearchQuery(''); }}
+              className="w-full text-left px-4 py-3 hover:bg-neutral-50 space-y-0.5"
+            >
+              <p className="text-[10px] font-semibold text-neutral-400 truncate">Conversation {msg.conversationId}</p>
+              <p className="text-xs text-neutral-800 truncate leading-relaxed">{msg.content}</p>
+              <p className="text-[10px] text-neutral-400">{new Date(msg.createdAt).toLocaleString()}</p>
+            </button>
+          ))}
         </div>
+      )}
+
+      {/* Conversation List Scroll Area — hidden while message search is active */}
+      {!(searchOpen && searchQuery.length >= 2) && (
+        isLoading ? (
+          <InboxLoading />
+        ) : isError ? (
+          <ApiErrorState
+            title="Couldn't load this inbox"
+            description="The conversation list failed to load. Please try again."
+            onRetry={onRetry}
+          />
+        ) : conversations.length === 0 ? (
+          <NoConversationsEmptyState />
+        ) : (
+          <div
+            ref={parentRef}
+            className="flex-1 overflow-y-auto"
+            role="listbox"
+            aria-label="Conversation list"
+            onScroll={handleScroll}
+          >
+            <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const conv = conversations[virtualRow.index];
+                return (
+                  <ConversationRow
+                    key={conv.id}
+                    conversation={conv}
+                    isSelected={selectedConversationIds.includes(conv.id)}
+                    isActive={activeConversationId === conv.id}
+                    isBookmarked={bookmarkedIds.has(conv.id)}
+                    top={virtualRow.start}
+                    onToggleSelect={() => toggleSelectConversation(conv.id)}
+                    onToggleBookmark={() =>
+                      toggleBookmarkMutation.mutate({ conversationId: conv.id, bookmarked: bookmarkedIds.has(conv.id) })
+                    }
+                    onToggleSnooze={() =>
+                      toggleSnoozeMutation.mutate({ conversationId: conv.id, snoozed: conv.status === 'snoozed' })
+                    }
+                    onOpen={() => setActiveConversationId(conv.id)}
+                  />
+                );
+              })}
+            </div>
+            {isFetchingMore && (
+              <div className="py-3 text-center text-xs font-semibold text-neutral-400">Loading more…</div>
+            )}
+          </div>
+        )
       )}
     </div>
   );

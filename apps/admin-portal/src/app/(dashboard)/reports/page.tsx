@@ -1,12 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import { FileText, Mail, Trash2, Plus } from 'lucide-react';
+import { FileText, Mail, Trash2, Plus, Pencil, Check, X } from 'lucide-react';
 import {
   useAnalyticsReports,
   useCreateAnalyticsReport,
   useDeleteAnalyticsReport,
   useExportAnalyticsReport,
+  useUpdateAnalyticsReport,
 } from '../../../hooks/useAdminQueries';
 
 const REPORT_TYPES = ['Tenant Reports', 'AI Reports', 'Agent Reports', 'Realtime Dashboard'];
@@ -17,12 +18,15 @@ export default function ReportsPage() {
   const createMutation = useCreateAnalyticsReport();
   const deleteMutation = useDeleteAnalyticsReport();
   const exportMutation = useExportAnalyticsReport();
+  const updateMutation = useUpdateAnalyticsReport();
 
   const [showForm, setShowForm] = React.useState(false);
   const [name, setName] = React.useState('');
   const [reportType, setReportType] = React.useState(REPORT_TYPES[0]);
   const [timeRange, setTimeRange] = React.useState(TIME_RANGES[1]);
   const [emailedReportId, setEmailedReportId] = React.useState<string | null>(null);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editForm, setEditForm] = React.useState({ name: '', reportType: '', timeRange: '' });
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,34 +150,96 @@ export default function ReportsPage() {
                 <tbody className="divide-y divide-neutral-100 text-neutral-700">
                   {reports.map((rep) => (
                     <tr key={rep.id}>
-                      <td className="p-3 font-semibold text-neutral-800 flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-neutral-400" />
-                        <span>{rep.name}</span>
-                      </td>
-                      <td className="p-3">{rep.reportType}</td>
-                      <td className="p-3">{rep.timeRange}</td>
-                      <td className="p-3">{new Date(rep.createdAt).toLocaleString()}</td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleEmail(rep.id, 'CSV')}
-                            disabled={exportMutation.isPending}
-                            className="p-1 text-primary-500 hover:text-primary-700 rounded disabled:opacity-40"
-                            title="Email CSV export"
-                            aria-label={`Email CSV export of ${rep.name}`}
-                          >
-                            <Mail className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(rep.id, rep.name)}
-                            disabled={deleteMutation.isPending}
-                            className="p-1 text-neutral-400 hover:text-danger rounded"
-                            aria-label={`Delete report ${rep.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
+                      {editingId === rep.id ? (
+                        <>
+                          <td className="p-2">
+                            <input
+                              value={editForm.name}
+                              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                              className="w-full border border-neutral-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <select
+                              value={editForm.reportType}
+                              onChange={(e) => setEditForm({ ...editForm, reportType: e.target.value })}
+                              className="w-full border border-neutral-200 rounded px-2 py-1 text-xs bg-white"
+                            >
+                              {REPORT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </td>
+                          <td className="p-2">
+                            <select
+                              value={editForm.timeRange}
+                              onChange={(e) => setEditForm({ ...editForm, timeRange: e.target.value })}
+                              className="w-full border border-neutral-200 rounded px-2 py-1 text-xs bg-white"
+                            >
+                              {TIME_RANGES.map((t) => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </td>
+                          <td className="p-2">{new Date(rep.createdAt).toLocaleString()}</td>
+                          <td className="p-2 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => {
+                                  updateMutation.mutate(
+                                    { id: rep.id, name: editForm.name, reportType: editForm.reportType, timeRange: editForm.timeRange },
+                                    { onSuccess: () => setEditingId(null) },
+                                  );
+                                }}
+                                disabled={updateMutation.isPending}
+                                className="p-1 text-success hover:text-success/80 rounded disabled:opacity-50"
+                                aria-label="Save"
+                              >
+                                <Check className="h-4 w-4" />
+                              </button>
+                              <button onClick={() => setEditingId(null)} className="p-1 text-neutral-400 hover:text-neutral-700 rounded" aria-label="Cancel">
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="p-3 font-semibold text-neutral-800">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-neutral-400 shrink-0" />
+                              <span>{rep.name}</span>
+                            </div>
+                          </td>
+                          <td className="p-3">{rep.reportType}</td>
+                          <td className="p-3">{rep.timeRange}</td>
+                          <td className="p-3">{new Date(rep.createdAt).toLocaleString()}</td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => { setEditingId(rep.id); setEditForm({ name: rep.name, reportType: rep.reportType, timeRange: rep.timeRange }); }}
+                                className="p-1 text-neutral-400 hover:text-neutral-700 rounded"
+                                aria-label={`Edit ${rep.name}`}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleEmail(rep.id, 'CSV')}
+                                disabled={exportMutation.isPending}
+                                className="p-1 text-primary-500 hover:text-primary-700 rounded disabled:opacity-40"
+                                title="Email CSV export"
+                                aria-label={`Email CSV export of ${rep.name}`}
+                              >
+                                <Mail className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(rep.id, rep.name)}
+                                disabled={deleteMutation.isPending}
+                                className="p-1 text-neutral-400 hover:text-danger rounded"
+                                aria-label={`Delete report ${rep.name}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>

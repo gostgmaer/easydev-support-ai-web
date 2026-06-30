@@ -9,17 +9,32 @@ import { TicketPanel } from '../../../components/ticket-panel';
 import { AiPanel } from '../../../components/ai-panel';
 import { KnowledgePanel } from '../../../components/knowledge-panel';
 import { useInboxStore } from '../../../store/inboxStore';
+import { useConversations, useMyAgentProfile } from '../../../hooks/useQueries';
 import { User, Ticket, Sparkles, BookOpen } from 'lucide-react';
 
 export default function InboxPage() {
   const activeConversationId = useInboxStore((state) => state.activeConversationId);
+  const selectedView = useInboxStore((state) => state.selectedView);
+  const filters = useInboxStore((state) => state.filters);
   const [activeTab, setActiveTab] = useState<'customer' | 'ticket' | 'ai' | 'knowledge'>('ai');
+
+  const { data: agentProfile } = useMyAgentProfile();
+  const teamId = agentProfile?.teamIds[0] ?? null;
+  const { isLoading, isError, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useConversations(selectedView, filters, teamId);
 
   return (
     <div className="flex h-full w-full bg-neutral-100 overflow-hidden" role="region" aria-label="Unified Inbox Workspace">
       {/* Left panel: Conversations stream */}
       <div className="w-80 border-r border-neutral-200 bg-white flex-shrink-0 flex flex-col h-full">
-        <InboxList />
+        <InboxList
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetch()}
+          hasMore={hasNextPage}
+          isFetchingMore={isFetchingNextPage}
+          onLoadMore={() => fetchNextPage()}
+        />
       </div>
 
       {/* Middle panel: Message Timeline & Input Composer */}

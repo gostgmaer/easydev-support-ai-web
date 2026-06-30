@@ -35,6 +35,16 @@ export function useWorkflowExecution(executionId: string | null) {
   });
 }
 
+export function useTriggerAiWorkflow() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { workflowId: string; conversationId?: string; ticketId?: string; context?: Record<string, unknown> }) =>
+      api.post<{ executionId: string }>('/v1/ai-workflows/trigger', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflow-executions'] }),
+  });
+}
+
 /**
  * There is no dedicated "retry" endpoint on the backend - the engine only exposes triggering
  * a fresh execution of a template. Retrying a failed execution is implemented as re-running

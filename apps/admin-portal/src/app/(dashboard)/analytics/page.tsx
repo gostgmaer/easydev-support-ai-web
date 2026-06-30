@@ -7,6 +7,7 @@ import {
   useAnalyticsAiMetrics,
   useAnalyticsChannelMetrics,
   useAnalyticsAgentMetrics,
+  useAnalyticsAgentDetail,
   useTriggerAnalyticsExport,
 } from '../../../hooks/useAdminQueries';
 import { Users } from 'lucide-react';
@@ -26,6 +27,8 @@ export default function AnalyticsPage() {
   const { data: channelMetrics, isLoading: isChannelsLoading } = useAnalyticsChannelMetrics(timeRange);
   const { data: agentMetrics, isLoading: isAgentsLoading } = useAnalyticsAgentMetrics(timeRange);
   const exportMutation = useTriggerAnalyticsExport();
+  const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(null);
+  const { data: agentDetail, isLoading: isDetailLoading } = useAnalyticsAgentDetail(selectedAgentId ?? undefined, timeRange);
 
   const handleExport = () => {
     setExportStatus(null);
@@ -181,13 +184,41 @@ export default function AnalyticsPage() {
               </thead>
               <tbody className="divide-y divide-neutral-100">
                 {agentMetrics.map((agent) => (
-                  <tr key={agent.agentId} className="hover:bg-neutral-50">
-                    <td className="px-4 py-2 font-medium text-neutral-900">{agent.displayName || agent.agentId}</td>
-                    <td className="px-4 py-2 text-right font-semibold">{agent.ticketsResolved}</td>
-                    <td className="px-4 py-2 text-right">{Math.round(agent.avgResponseTime)}s</td>
-                    <td className="px-4 py-2 text-right">{Math.round(agent.avgResolutionTime)}s</td>
-                    <td className="px-4 py-2 text-right text-success font-semibold">{agent.csatScore.toFixed(1)}</td>
-                  </tr>
+                  <React.Fragment key={agent.agentId}>
+                    <tr
+                      className={`hover:bg-neutral-50 cursor-pointer ${selectedAgentId === agent.agentId ? 'bg-primary-50/50' : ''}`}
+                      onClick={() => setSelectedAgentId((cur) => cur === agent.agentId ? null : agent.agentId)}
+                    >
+                      <td className="px-4 py-2 font-medium text-neutral-900 text-primary-700 hover:underline">{agent.displayName || agent.agentId}</td>
+                      <td className="px-4 py-2 text-right font-semibold">{agent.ticketsResolved}</td>
+                      <td className="px-4 py-2 text-right">{Math.round(agent.avgResponseTime)}s</td>
+                      <td className="px-4 py-2 text-right">{Math.round(agent.avgResolutionTime)}s</td>
+                      <td className="px-4 py-2 text-right text-success font-semibold">{agent.csatScore.toFixed(1)}</td>
+                    </tr>
+                    {selectedAgentId === agent.agentId && (
+                      <tr className="bg-primary-50/30">
+                        <td colSpan={5} className="px-4 py-3">
+                          {isDetailLoading ? (
+                            <p className="text-[10px] text-neutral-400 animate-pulse">Loading agent detail…</p>
+                          ) : agentDetail ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                              {[
+                                { label: 'Conversations', value: agentDetail.conversationsHandled ?? '—' },
+                                { label: 'Tickets Resolved', value: agentDetail.ticketsResolved },
+                                { label: 'Avg Response', value: `${Math.round(agentDetail.avgResponseTime)}s` },
+                                { label: 'CSAT', value: agentDetail.csatScore.toFixed(2) },
+                              ].map(({ label, value }) => (
+                                <div key={label} className="rounded border border-primary-100 bg-white px-3 py-2 space-y-0.5">
+                                  <p className="text-[10px] text-neutral-400 font-semibold uppercase">{label}</p>
+                                  <p className="font-bold text-neutral-800">{String(value)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

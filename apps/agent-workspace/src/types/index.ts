@@ -27,6 +27,8 @@ export interface Message {
   content: string;
   isInternalNote: boolean;
   createdAt: string;
+  /** Optimistic-UI only — set to 'failed' when the send mutation errors out. */
+  status?: 'failed';
   attachments?: {
     name: string;
     url: string;

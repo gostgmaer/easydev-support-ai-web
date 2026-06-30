@@ -22,16 +22,6 @@ interface InboxPage {
   nextCursor?: string;
 }
 
-export function useTeams() {
-  const api = useApiClient();
-  return useQuery<{ id: string; name: string }[]>({
-    queryKey: ['teams'],
-    queryFn: async () => {
-      return api.get<{ id: string; name: string }[]>('/v1/teams');
-    },
-  });
-}
-
 // 1. UNIFIED INBOX (real backend surface is /v1/inbox/*, not a generic /v1/conversations list)
 export function useConversations(view: InboxView, filters: InboxFilters, teamId?: string | null) {
   const api = useApiClient();
@@ -187,6 +177,19 @@ export function useCustomerDetails(customerId: string | null) {
   });
 }
 
+export function useTicketList(filters?: { status?: string; search?: string }) {
+  const api = useApiClient();
+  return useQuery<{ data: Ticket[]; total: number }>({
+    queryKey: ['tickets', filters],
+    queryFn: async () => {
+      const result = await api.get<{ data: Record<string, unknown>[]; total: number }>('/v1/tickets', {
+        query: filters as Record<string, string> | undefined,
+      });
+      return { data: result.data.map(normalizeTicket), total: result.total };
+    },
+  });
+}
+
 export function useCustomerConversations(customerId: string | null) {
   const api = useApiClient();
   return useQuery<Conversation[]>({
@@ -330,6 +333,7 @@ export function useSendMessage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const addMessage = useConversationStore((state) => state.addMessage);
+  const markMessageFailed = useConversationStore((state) => state.markMessageFailed);
 
   return useMutation({
     mutationFn: async ({
@@ -365,6 +369,10 @@ export function useSendMessage() {
         const list = old ? [...old] : [];
         return list.map((m) => (m.id.startsWith('temp-') ? data : m));
       });
+    },
+    onError: (_err, variables, context) => {
+      const tempId = (context as { tempMessage?: Message } | undefined)?.tempMessage?.id;
+      if (tempId) markMessageFailed(variables.conversationId, tempId);
     },
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['messages', variables.conversationId] });
@@ -607,6 +615,15 @@ export function useMessageTemplates() {
   });
 }
 
+export function useTicketComments(ticketId: string | null) {
+  const api = useApiClient();
+  return useQuery<TicketComment[]>({
+    queryKey: ['ticket-comments', ticketId],
+    queryFn: () => api.get<TicketComment[]>(`/v1/tickets/${ticketId}/comments`),
+    enabled: !!ticketId,
+  });
+}
+
 export function useAddTicketComment() {
   const api = useApiClient();
   const queryClient = useQueryClient();
@@ -616,7 +633,10 @@ export function useAddTicketComment() {
     mutationFn: async ({ ticketId, content }: { ticketId: string; content: string }) => {
       return api.post<TicketComment>(`/v1/tickets/${ticketId}/comments`, { content });
     },
-    onSuccess: (comment, { ticketId }) => addComment(ticketId, comment),
+    onSuccess: (comment, { ticketId }) => {
+      addComment(ticketId, comment);
+      queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
+    },
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
     },
@@ -776,6 +796,36 @@ export function useBulkAssign() {
   return useMutation({
     mutationFn: ({ conversationIds, agentProfileId }: { conversationIds: string[]; agentProfileId: string }) =>
       api.post<{ assigned: number }>('/v1/inbox/bulk/assign', { conversationIds, agentProfileId }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useBulkResolveConversations() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationIds: string[]) =>
+      api.post<{ resolved: number }>('/v1/conversations/bulk/resolve', { conversationIds }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useBulkCloseConversations() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationIds, reason }: { conversationIds: string[]; reason?: string }) =>
+      api.post<{ closed: number }>('/v1/conversations/bulk/close', { conversationIds, reason }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useBulkTagConversations() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationIds, tag }: { conversationIds: string[]; tag: string }) =>
+      api.post<{ tagged: number }>('/v1/conversations/bulk/tag', { conversationIds, tag }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
   });
 }
@@ -1046,6 +1096,17 @@ export function useDecideTicketApproval() {
       decision: 'approve' | 'reject';
       note?: string;
     }) => api.post<{ success: boolean }>(`/v1/approvals/${approvalId}/${decision}`, { note }),
+    onSuccess: (_, { ticketId }) =>
+      queryClient.invalidateQueries({ queryKey: ['ticket-approvals', ticketId] }),
+  });
+}
+
+export function useCancelTicketApproval() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ approvalId, ticketId }: { approvalId: string; ticketId: string }) =>
+      api.post<{ success: boolean }>(`/v1/approvals/${approvalId}/cancel`, {}),
     onSuccess: (_, { ticketId }) =>
       queryClient.invalidateQueries({ queryKey: ['ticket-approvals', ticketId] }),
   });
@@ -1336,6 +1397,26 @@ export function useArchiveConversation() {
   });
 }
 
+export function useTicketBulkStatus() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketIds, status }: { ticketIds: string[]; status: string }) =>
+      api.post<{ updated: number }>('/v1/tickets/bulk/status', { ticketIds, status }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tickets'] }),
+  });
+}
+
+export function useMergeTickets() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ primaryId, duplicateId }: { primaryId: string; duplicateId: string }) =>
+      api.post<{ ticketId: string }>('/v1/tickets/merge', { primaryId, duplicateId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tickets'] }),
+  });
+}
+
 export function useAddTicketTag() {
   const api = useApiClient();
   const queryClient = useQueryClient();
@@ -1351,6 +1432,318 @@ export function useRemoveTicketTag() {
   return useMutation({
     mutationFn: ({ ticketId, tag }: { ticketId: string; tag: string }) => api.delete(`/v1/tickets/${ticketId}/tags/${tag}`),
     onSettled: (_, __, { ticketId }) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] })
+  });
+}
+
+// ─── TEAMS (for ticket transfer modal) ───────────────────────────────────────
+
+export interface AgentTeam {
+  id: string;
+  name: string;
+  description?: string;
+  department?: string;
+  isActive: boolean;
+}
+
+export function useTeams() {
+  const api = useApiClient();
+  return useQuery<AgentTeam[]>({
+    queryKey: ['teams'],
+    queryFn: async () => {
+      const result = await api.get<{ data: AgentTeam[]; total: number }>('/v1/teams');
+      return result.data;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+// ─── AI COPILOT SUGGESTIONS ───────────────────────────────────────────────────
+
+export interface AiSuggestion {
+  suggestion: string;
+  confidence: number;
+  sources?: { title: string; url?: string }[];
+}
+
+export function useAiSuggestResponse() {
+  const api = useApiClient();
+  return useMutation({
+    mutationFn: ({ conversationId, prompt }: { conversationId: string; prompt?: string }) =>
+      api.post<AiSuggestion>(`/v1/ai-sessions/conversation/${conversationId}/suggest`, { prompt }),
+  });
+}
+
+// ─── INBOX UNREAD COUNT ───────────────────────────────────────────────────────
+
+export function useInboxUnreadCount() {
+  const api = useApiClient();
+  return useQuery<{ unread: number }>({
+    queryKey: ['inbox', 'unread'],
+    queryFn: () => api.get<{ unread: number }>('/v1/inbox/unread'),
+    refetchInterval: 30_000,
+  });
+}
+
+// ─── INBOX SAVED FILTERS (server-side) ───────────────────────────────────────
+
+export interface ServerInboxFilter {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  createdAt: string;
+}
+
+export function useServerInboxFilters() {
+  const api = useApiClient();
+  return useQuery<ServerInboxFilter[]>({
+    queryKey: ['inbox', 'filters'],
+    queryFn: () => api.get<ServerInboxFilter[]>('/v1/inbox/filters'),
+  });
+}
+
+export function useCreateServerInboxFilter() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; filters: Record<string, unknown> }) =>
+      api.post<ServerInboxFilter>('/v1/inbox/filters', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox', 'filters'] }),
+  });
+}
+
+export function useDeleteServerInboxFilter() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (filterId: string) => api.delete<void>(`/v1/inbox/filters/${filterId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox', 'filters'] }),
+  });
+}
+
+// ─── CONVERSATION MERGE ───────────────────────────────────────────────────────
+
+export function useMergeConversations() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ primaryId, duplicateId }: { primaryId: string; duplicateId: string }) =>
+      api.post<{ conversationId: string }>('/v1/conversations/merge', { primaryId, duplicateId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+// ─── AGENT-SIDE CONVERSATION CREATION ────────────────────────────────────────
+
+export function useCreateOutboundConversation() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { customerId: string; subject?: string; channelId?: string; initialMessage?: string }) =>
+      api.post<{ id: string; status: string }>('/v1/conversations', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+// ─── TICKET LIFECYCLE COMPLETIONS ─────────────────────────────────────────────
+
+export function useTicketByNumber(ticketNumber: number | null) {
+  const api = useApiClient();
+  return useQuery<Ticket>({
+    queryKey: ['ticket-by-number', ticketNumber],
+    queryFn: () => api.get<Ticket>(`/v1/tickets/number/${ticketNumber}`),
+    enabled: ticketNumber != null,
+  });
+}
+
+export function useAutoAssignTicket() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ticketId: string) => api.post<{ agentProfileId: string }>(`/v1/tickets/${ticketId}/auto-assign`),
+    onSuccess: (_, ticketId) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] }),
+  });
+}
+
+export function useStartTicket() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ticketId: string) => api.post<Ticket>(`/v1/tickets/${ticketId}/start`),
+    onSuccess: (_, ticketId) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] }),
+  });
+}
+
+export function useSetTicketPending() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketId, reason }: { ticketId: string; reason?: string }) =>
+      api.post<Ticket>(`/v1/tickets/${ticketId}/pending`, { reason }),
+    onSuccess: (_, { ticketId }) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] }),
+  });
+}
+
+export function useResumeTicketSla() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ticketId: string) => api.post<Ticket>(`/v1/tickets/${ticketId}/resume-sla`),
+    onSuccess: (_, ticketId) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] }),
+  });
+}
+
+export function useReopenTicket() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ticketId: string) => api.post<Ticket>(`/v1/tickets/${ticketId}/reopen`),
+    onSuccess: (_, ticketId) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] }),
+  });
+}
+
+export function useEscalateTicket() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketId, reason, escalateTo }: { ticketId: string; reason?: string; escalateTo?: string }) =>
+      api.post<Ticket>(`/v1/tickets/${ticketId}/escalate`, { reason, escalateTo }),
+    onSuccess: (_, { ticketId }) => queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] }),
+  });
+}
+
+export function useTicketAssignments(ticketId: string | null) {
+  const api = useApiClient();
+  return useQuery<{ agentProfileId: string; assignedAt: string; role?: string }[]>({
+    queryKey: ['ticket-assignments', ticketId],
+    queryFn: () => api.get<{ agentProfileId: string; assignedAt: string; role?: string }[]>(`/v1/tickets/${ticketId}/assignments`),
+    enabled: !!ticketId,
+  });
+}
+
+// ─── PRIORITY INBOX VIEW ──────────────────────────────────────────────────────
+
+export function useInboxByPriority(priority: 'URGENT' | 'HIGH' | 'MEDIUM' | 'LOW') {
+  const api = useApiClient();
+  return useQuery<{ data: Conversation[]; nextCursor?: string }>({
+    queryKey: ['inbox', 'priority', priority],
+    queryFn: () =>
+      api.get<{ data: Conversation[]; nextCursor?: string }>(`/v1/inbox/priority/${priority}`),
+    staleTime: 30_000,
+  });
+}
+
+// ─── AI SESSIONS & ESCALATIONS ────────────────────────────────────────────────
+
+export interface AiSession {
+  id: string;
+  conversationId: string;
+  state: 'active' | 'paused' | 'handoff' | 'closed';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiEscalation {
+  id: string;
+  conversationId: string;
+  reason: string;
+  status: 'pending' | 'resolved';
+  createdAt: string;
+}
+
+export function useAiSession(conversationId: string | null) {
+  const api = useApiClient();
+  return useQuery<AiSession>({
+    queryKey: ['ai-session', conversationId],
+    queryFn: () => api.get<AiSession>(`/v1/ai-sessions/conversation/${conversationId}`),
+    enabled: !!conversationId,
+  });
+}
+
+export function useUpdateAiSessionState() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, state }: { conversationId: string; state: AiSession['state'] }) =>
+      api.put<AiSession>(`/v1/ai-sessions/conversation/${conversationId}/state`, { state }),
+    onSuccess: (_, { conversationId }) =>
+      queryClient.invalidateQueries({ queryKey: ['ai-session', conversationId] }),
+  });
+}
+
+export function useAiEscalations(status?: string) {
+  const api = useApiClient();
+  return useQuery<AiEscalation[]>({
+    queryKey: ['ai-escalations', status],
+    queryFn: () => api.get<AiEscalation[]>('/v1/ai-escalations', { query: status ? { status } : undefined }),
+  });
+}
+
+export function useResolveAiEscalation() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<AiEscalation>(`/v1/ai-escalations/${id}/resolve`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ai-escalations'] }),
+  });
+}
+
+// ─── CONVERSATION SPLIT ───────────────────────────────────────────────────────
+
+export function useSplitConversation() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      api.post<{ id: string; status: string }>(`/v1/conversations/${conversationId}/split`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+// ─── MESSAGE LIFECYCLE ACTIONS ────────────────────────────────────────────────
+
+export function useMarkMessageRead() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) => api.post<{ read: boolean }>(`/v1/messages/${messageId}/read`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useRetryMessage() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) => api.post<{ messageId: string }>(`/v1/messages/${messageId}/retry`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useArchiveMessage() {
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) => api.post<{ archived: boolean }>(`/v1/messages/${messageId}/archive`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
+  });
+}
+
+export function useSearchMessages(query: string) {
+  const api = useApiClient();
+  return useQuery<Message[]>({
+    queryKey: ['messages', 'search', query],
+    queryFn: () => api.get<Message[]>('/v1/messages/search', { query: { q: query } }),
+    enabled: query.trim().length >= 2,
+    staleTime: 30_000,
+  });
+}
+
+export function useThreadMessages(threadId: string | null) {
+  const api = useApiClient();
+  return useQuery<Message[]>({
+    queryKey: ['messages', 'thread', threadId],
+    queryFn: () => api.get<Message[]>(`/v1/messages/thread/${threadId}`),
+    enabled: !!threadId,
   });
 }
 

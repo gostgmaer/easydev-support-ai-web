@@ -1,12 +1,192 @@
 import React, { useEffect, useRef } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, RefreshCw, CheckCheck, Trash2, Archive, MessageSquare, ChevronDown } from 'lucide-react';
 import { useAuth } from '@easydev/auth';
 import { MessageBubble, TypingIndicator, ConversationLoading } from '@easydev/ui';
 import { useConversationStore } from '../store/conversationStore';
 import { useInboxStore } from '../store/inboxStore';
-import { useConversationMessages, useMarkConversationRead, useSplitTicket, useTicketByConversation } from '../hooks/useQueries';
+import {
+  useConversationMessages,
+  useMarkConversationRead,
+  useRetryMessage,
+  useSplitTicket,
+  useTicketByConversation,
+  useAddMessageReaction,
+  useRemoveMessageReaction,
+  useMarkMessageRead,
+  useDeleteMessage,
+  useArchiveMessage,
+  useMessageDelivery,
+  useThreadMessages,
+} from '../hooks/useQueries';
 import { useRealtime } from '../hooks/useRealtime';
 import { toMessageItem } from '../lib/ui-adapters';
+import type { Message } from '../types';
+
+const PRESET_EMOJIS = ['👍', '👎', '❤️', '😄', '😮'] as const;
+
+function MessageDeliveryBadge({ messageId }: { messageId: string }) {
+  const { data: delivery } = useMessageDelivery(messageId);
+  if (!delivery) return null;
+  const label = delivery.readAt ? 'Read' : delivery.deliveredAt ? 'Delivered' : delivery.status;
+  const tone = delivery.readAt ? 'text-success' : delivery.deliveredAt ? 'text-primary-500' : 'text-neutral-400';
+  return (
+    <span className={`flex items-center gap-0.5 text-[9px] font-semibold ${tone}`}>
+      <CheckCheck className="h-2.5 w-2.5" />
+      {label}
+    </span>
+  );
+}
+
+function ThreadPanel({ threadId, conversationId }: { threadId: string; conversationId: string }) {
+  const { data: threadMessages = [], isLoading } = useThreadMessages(threadId);
+  if (isLoading) return <p className="text-[10px] text-neutral-400 animate-pulse pl-4 pt-1">Loading thread…</p>;
+  if (threadMessages.length === 0) return null;
+  return (
+    <div className="pl-4 pt-1 space-y-1 border-l-2 border-primary-100 ml-4">
+      {threadMessages.map((msg) => (
+        <div key={msg.id} className="text-[10px] text-neutral-600 bg-neutral-50 rounded px-2 py-1">
+          <span className="font-semibold text-neutral-500">{msg.senderType}: </span>
+          {msg.content}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MessageActions({ message, conversationId }: { message: Message; conversationId: string }) {
+  const markRead = useMarkMessageRead();
+  const deleteMsg = useDeleteMessage();
+  const archiveMsg = useArchiveMessage();
+  const [showThread, setShowThread] = React.useState(false);
+  const threadId = (message as any).threadId as string | undefined;
+
+  return (
+    <div className="mt-0.5 space-y-1">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => markRead.mutate(message.id)}
+          disabled={markRead.isPending}
+          className="opacity-0 group-hover:opacity-100 inline-flex items-center gap-0.5 text-[9px] font-semibold text-neutral-400 hover:text-primary-600 transition-all disabled:opacity-30"
+          title="Mark as read"
+        >
+          <CheckCheck className="h-2.5 w-2.5" />
+        </button>
+        {threadId && (
+          <button
+            type="button"
+            onClick={() => setShowThread((v) => !v)}
+            className="opacity-0 group-hover:opacity-100 inline-flex items-center gap-0.5 text-[9px] font-semibold text-neutral-400 hover:text-primary-600 transition-all"
+            title="View thread"
+          >
+            <MessageSquare className="h-2.5 w-2.5" />
+            <ChevronDown className={`h-2 w-2 transition-transform ${showThread ? 'rotate-180' : ''}`} />
+          </button>
+        )}
+        <MessageDeliveryBadge messageId={message.id} />
+        <button
+          type="button"
+          onClick={() => archiveMsg.mutate(message.id)}
+          disabled={archiveMsg.isPending}
+          className="opacity-0 group-hover:opacity-100 inline-flex items-center text-[9px] text-neutral-400 hover:text-warning transition-all disabled:opacity-30"
+          title="Archive message"
+        >
+          <Archive className="h-2.5 w-2.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => { if (confirm('Delete this message?')) deleteMsg.mutate({ messageId: message.id, conversationId }); }}
+          disabled={deleteMsg.isPending}
+          className="opacity-0 group-hover:opacity-100 inline-flex items-center text-[9px] text-neutral-400 hover:text-danger transition-all disabled:opacity-30"
+          title="Delete message"
+        >
+          <Trash2 className="h-2.5 w-2.5" />
+        </button>
+      </div>
+      {showThread && threadId && (
+        <ThreadPanel threadId={threadId} conversationId={conversationId} />
+      )}
+    </div>
+  );
+}
+
+function MessageReactions({
+  message,
+  conversationId,
+  currentUserId,
+}: {
+  message: Message;
+  conversationId: string;
+  currentUserId: string;
+}) {
+  const addReaction = useAddMessageReaction();
+  const removeReaction = useRemoveMessageReaction();
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const reactions = message.reactions ?? [];
+
+  const toggle = (emoji: string) => {
+    const existing = reactions.find((r) => r.emoji === emoji);
+    if (existing?.users.includes(currentUserId)) {
+      removeReaction.mutate({ messageId: message.id, conversationId, emoji });
+    } else {
+      addReaction.mutate({ messageId: message.id, conversationId, emoji });
+    }
+    setPickerOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      {/* Emoji picker toggle – only visible on group hover */}
+      <button
+        type="button"
+        onClick={() => setPickerOpen((p) => !p)}
+        className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-7 right-1 z-10 rounded-full border border-neutral-200 bg-white px-2 py-0.5 text-[11px] shadow-sm hover:bg-neutral-50"
+        title="React to message"
+      >
+        😊 +
+      </button>
+
+      {pickerOpen && (
+        <div className="absolute -top-14 right-0 z-20 flex gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2 shadow-lg">
+          {PRESET_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => toggle(emoji)}
+              className="text-lg transition-transform hover:scale-125 active:scale-110"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {reactions.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {reactions.map((reaction) => {
+            const reacted = reaction.users.includes(currentUserId);
+            return (
+              <button
+                key={reaction.emoji}
+                type="button"
+                onClick={() => toggle(reaction.emoji)}
+                title={reacted ? 'Remove reaction' : 'Add reaction'}
+                className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-xs transition
+                  ${reacted
+                    ? 'border-primary-300 bg-primary-50 text-primary-700'
+                    : 'border-neutral-200 bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
+                  }`}
+              >
+                <span>{reaction.emoji}</span>
+                <span className="text-[10px] font-semibold">{reaction.users.length}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Shared stable reference for the "no typing state" case - returning a fresh
 // {} literal from the selector below on every call makes useSyncExternalStore
@@ -25,6 +205,7 @@ export function ConversationTimeline() {
 
   const { emitRead } = useRealtime(user?.id);
   const markReadMutation = useMarkConversationRead();
+  const retryMessageMutation = useRetryMessage();
 
   const [splitMode, setSplitMode] = React.useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = React.useState<Set<string>>(new Set());
@@ -173,8 +354,32 @@ export function ConversationTimeline() {
                 />
               </div>
             )}
-            <div className={`flex-1 transition ${splitMode && selectedMessageIds.has(message.id) ? 'ring-2 ring-primary-500 rounded-lg p-1 bg-primary-50/50' : ''}`}>
+            <div className={`relative flex-1 transition ${splitMode && selectedMessageIds.has(message.id) ? 'ring-2 ring-primary-500 rounded-lg p-1 bg-primary-50/50' : ''}`}>
               <MessageBubble message={toMessageItem(message)} />
+              {message.status === 'failed' && activeConversationId && (
+                <div className="mt-1 flex items-center justify-end gap-1.5">
+                  <span className="text-[10px] text-danger font-semibold">Failed to send</span>
+                  <button
+                    type="button"
+                    onClick={() => retryMessageMutation.mutate({ messageId: message.id, conversationId: activeConversationId })}
+                    disabled={retryMessageMutation.isPending}
+                    className="inline-flex items-center gap-1 rounded-full border border-danger/30 bg-danger/5 px-2 py-0.5 text-[10px] font-bold text-danger hover:bg-danger/10 disabled:opacity-50 transition"
+                  >
+                    <RefreshCw className="h-2.5 w-2.5" />
+                    Retry
+                  </button>
+                </div>
+              )}
+              {activeConversationId && (
+                <MessageReactions
+                  message={message}
+                  conversationId={activeConversationId}
+                  currentUserId={user?.id ?? ''}
+                />
+              )}
+              {activeConversationId && (
+                <MessageActions message={message} conversationId={activeConversationId} />
+              )}
             </div>
           </div>
         ))}

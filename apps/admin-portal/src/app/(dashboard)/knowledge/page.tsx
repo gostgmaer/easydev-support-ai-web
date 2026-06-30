@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { FileText, Search, Trash2, Folder, Plus, Globe } from 'lucide-react';
+import { FileText, Search, Trash2, Folder, Plus, Globe, History, X } from 'lucide-react';
 import { toAppError } from '@easydev/utils';
 import {
   useKnowledgeDocuments,
@@ -11,7 +11,12 @@ import {
   useKnowledgeSources,
   useCreateKnowledgeSource,
   useCreateKnowledgeDocument,
+  usePublishKnowledgeDocument,
+  useArchiveKnowledgeDocument,
+  useIngestKnowledgeDocument,
+  useKnowledgeDocumentVersions,
 } from '@/hooks/useAdminQueries';
+import type { KnowledgeDocumentVersion } from '@/hooks/useAdminQueries';
 import type { KnowledgeDocument } from '@/store/adminStore';
 
 const STATUS_TONE: Record<KnowledgeDocument['status'], string> = {
@@ -311,11 +316,72 @@ function AddDocumentForm({
   );
 }
 
+function DocumentVersionsDrawer({
+  document,
+  onClose,
+}: {
+  document: { id: string; title: string };
+  onClose: () => void;
+}) {
+  const { data: versions = [], isLoading } = useKnowledgeDocumentVersions(document.id);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-neutral-900/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="flex h-full w-full max-w-sm flex-col bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
+          <div>
+            <h3 className="text-sm font-bold text-neutral-800">Version History</h3>
+            <p className="text-[11px] text-neutral-500 truncate max-w-[220px]">{document.title}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded p-1 hover:bg-neutral-100 text-neutral-400">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {isLoading ? (
+            <p className="text-xs text-neutral-400 animate-pulse">Loading versions...</p>
+          ) : versions.length === 0 ? (
+            <p className="text-xs italic text-neutral-400">No version history found.</p>
+          ) : (
+            <ol className="relative space-y-4 border-l border-neutral-200 pl-5">
+              {versions.map((v: KnowledgeDocumentVersion) => (
+                <li key={v.id} className="relative">
+                  <span className="absolute -left-[21px] flex h-4 w-4 items-center justify-center rounded-full bg-primary-100 ring-2 ring-white">
+                    <History className="h-2.5 w-2.5 text-primary-600" />
+                  </span>
+                  <div className="rounded border border-neutral-100 bg-neutral-50 p-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-neutral-800">v{v.version}</span>
+                      <span className="text-[10px] text-neutral-400">
+                        {new Date(v.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {v.title && <p className="mt-0.5 text-neutral-600 truncate">{v.title}</p>}
+                    {v.createdBy && (
+                      <p className="mt-0.5 text-[10px] text-neutral-400">by {v.createdBy}</p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function KnowledgePage() {
   const router = useRouter();
   const pathname = usePathname();
   const { data: documents = [], isLoading } = useKnowledgeDocuments();
   const deleteMutation = useDeleteKnowledgeDocument();
+  const publishMutation = usePublishKnowledgeDocument();
+  const archiveMutation = useArchiveKnowledgeDocument();
+  const ingestMutation = useIngestKnowledgeDocument();
   const { data: categories = [], isLoading: isCategoriesLoading } = useKnowledgeCategories();
   const { data: sources = [], isLoading: isSourcesLoading } = useKnowledgeSources();
 
@@ -323,6 +389,7 @@ export default function KnowledgePage() {
   const [search, setSearch] = React.useState('');
   const [isAddingSource, setIsAddingSource] = React.useState(false);
   const [isAddingDocument, setIsAddingDocument] = React.useState(false);
+  const [versionsDoc, setVersionsDoc] = React.useState<{ id: string; title: string } | null>(null);
 
   React.useEffect(() => {
     if (pathname.includes('/sources')) {
@@ -349,6 +416,9 @@ export default function KnowledgePage() {
 
   return (
     <div className="space-y-6" role="region" aria-label="Knowledge Base Manager">
+      {versionsDoc && (
+        <DocumentVersionsDrawer document={versionsDoc} onClose={() => setVersionsDoc(null)} />
+      )}
       {/* Header */}
       <div className="bg-white border border-neutral-200 rounded-lg p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -435,17 +505,57 @@ export default function KnowledgePage() {
                         </td>
                         <td className="p-3">v{doc.version}</td>
                         <td className="p-3 text-right">
-                          <button
-                            onClick={() => {
-                              if (confirm(`Delete document "${doc.title}"?`)) {
-                                deleteMutation.mutate({ id: doc.id });
-                              }
-                            }}
-                            className="text-neutral-400 hover:text-danger p-1"
-                            aria-label={`Delete ${doc.title}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            {doc.status === 'DRAFT' && (
+                              <button
+                                onClick={() => publishMutation.mutate({ id: doc.id })}
+                                disabled={publishMutation.isPending}
+                                className="rounded bg-success/10 border border-success/20 px-2 py-0.5 text-[10px] font-bold text-success hover:bg-success/20 disabled:opacity-50"
+                                title="Publish document"
+                              >
+                                Publish
+                              </button>
+                            )}
+                            {doc.status === 'ACTIVE' && (
+                              <button
+                                onClick={() => archiveMutation.mutate(doc.id)}
+                                disabled={archiveMutation.isPending}
+                                className="rounded bg-neutral-100 border border-neutral-200 px-2 py-0.5 text-[10px] font-bold text-neutral-500 hover:bg-neutral-200 disabled:opacity-50"
+                                title="Archive document"
+                              >
+                                Archive
+                              </button>
+                            )}
+                            {(doc.status === 'DRAFT' || doc.status === 'ACTIVE') && (
+                              <button
+                                onClick={() => ingestMutation.mutate(doc.id)}
+                                disabled={ingestMutation.isPending}
+                                className="rounded bg-primary-50 border border-primary-200 px-2 py-0.5 text-[10px] font-bold text-primary-600 hover:bg-primary-100 disabled:opacity-50"
+                                title="Re-ingest into AI index"
+                              >
+                                Ingest
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setVersionsDoc({ id: doc.id, title: doc.title })}
+                              className="text-neutral-400 hover:text-primary-600 p-1"
+                              aria-label={`View versions of ${doc.title}`}
+                              title="Version history"
+                            >
+                              <History className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm(`Delete document "${doc.title}"?`)) {
+                                  deleteMutation.mutate({ id: doc.id });
+                                }
+                              }}
+                              className="text-neutral-400 hover:text-danger p-1"
+                              aria-label={`Delete ${doc.title}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
