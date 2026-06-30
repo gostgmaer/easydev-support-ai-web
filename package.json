@@ -14,7 +14,8 @@
     "frontend:up:package": "node scripts/run-with-git-bash.js scripts/frontend-up.sh --with-packages",
     "frontend:down": "node scripts/run-with-git-bash.js scripts/frontend-down.sh",
     "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "postinstall": "pnpm run build:packages"
   },
   "devDependencies": {
     "typescript": "^5.7.2"
