@@ -22,6 +22,7 @@ interface ConversationState {
     messageId: string,
     receipts: { userId: string; timestamp: string }[]
   ) => void;
+  markMessageFailed: (conversationId: string, messageId: string) => void;
 }
 
 export const useConversationStore = create<ConversationState>((set) => ({
@@ -117,5 +118,11 @@ export const useConversationStore = create<ConversationState>((set) => ({
           [conversationId]: updated,
         },
       };
+    }),
+  markMessageFailed: (conversationId, messageId) =>
+    set((state) => {
+      const convMessages = state.messages[conversationId] || [];
+      const updated = convMessages.map((m) => (m.id === messageId ? { ...m, status: 'failed' as const } : m));
+      return { messages: { ...state.messages, [conversationId]: updated } };
     }),
 }));

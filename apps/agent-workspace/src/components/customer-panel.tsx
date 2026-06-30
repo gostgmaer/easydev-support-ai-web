@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { AlertTriangle, ShoppingBag, Tag } from 'lucide-react';
+import { AlertTriangle, ShoppingBag, History } from 'lucide-react';
 import { CustomerSidebar, Section, Badge } from '@easydev/ui';
-import { useCustomerDetails, useCustomerTickets } from '../hooks/useQueries';
+import { useCustomerDetails, useCustomerTickets, useCustomerTimeline } from '../hooks/useQueries';
 import { useCustomerStore } from '../store/customerStore';
 import { useInboxStore } from '../store/inboxStore';
 import { toCustomerProfile } from '../lib/ui-adapters';
@@ -16,6 +16,7 @@ export function CustomerPanel() {
     activeConv?.customerId ? state.customers[activeConv.customerId] : undefined,
   );
   const { data: tickets = [] } = useCustomerTickets(activeConv?.customerId || null);
+  const { data: timeline = [] } = useCustomerTimeline(activeConv?.customerId || null);
   const addNote = useCustomerStore((state) => state.addNote);
   const [newNote, setNewNote] = useState('');
 
@@ -138,6 +139,28 @@ export function CustomerPanel() {
           ))}
         </div>
       </Section>
+
+      {timeline.length > 0 && (
+        <Section title="Activity Timeline" className="p-4">
+          <div className="space-y-2 max-h-[200px] overflow-y-auto">
+            {timeline.map((entry, idx) => (
+              <div key={idx} className="flex items-start gap-2 text-xs">
+                <div className="mt-0.5 h-5 w-5 flex-shrink-0 rounded-full bg-neutral-100 flex items-center justify-center">
+                  <History className="h-3 w-3 text-neutral-400" />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-semibold text-neutral-700 capitalize block">
+                    {entry.type.replace(/_/g, ' ').toLowerCase()}
+                  </span>
+                  <span className="text-[10px] text-neutral-400 block">
+                    {new Date(entry.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
     </div>
   );
 }

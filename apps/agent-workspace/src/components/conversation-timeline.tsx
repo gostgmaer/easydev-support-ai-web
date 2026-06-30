@@ -1,12 +1,101 @@
 import React, { useEffect, useRef } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, RefreshCw } from 'lucide-react';
 import { useAuth } from '@easydev/auth';
 import { MessageBubble, TypingIndicator, ConversationLoading } from '@easydev/ui';
 import { useConversationStore } from '../store/conversationStore';
 import { useInboxStore } from '../store/inboxStore';
-import { useConversationMessages, useMarkConversationRead, useSplitTicket, useTicketByConversation } from '../hooks/useQueries';
+import {
+  useConversationMessages,
+  useMarkConversationRead,
+  useRetryMessage,
+  useSplitTicket,
+  useTicketByConversation,
+  useAddMessageReaction,
+  useRemoveMessageReaction,
+} from '../hooks/useQueries';
 import { useRealtime } from '../hooks/useRealtime';
 import { toMessageItem } from '../lib/ui-adapters';
+import type { Message } from '../types';
+
+const PRESET_EMOJIS = ['👍', '👎', '❤️', '😄', '😮'] as const;
+
+function MessageReactions({
+  message,
+  conversationId,
+  currentUserId,
+}: {
+  message: Message;
+  conversationId: string;
+  currentUserId: string;
+}) {
+  const addReaction = useAddMessageReaction();
+  const removeReaction = useRemoveMessageReaction();
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const reactions = message.reactions ?? [];
+
+  const toggle = (emoji: string) => {
+    const existing = reactions.find((r) => r.emoji === emoji);
+    if (existing?.users.includes(currentUserId)) {
+      removeReaction.mutate({ messageId: message.id, conversationId, emoji });
+    } else {
+      addReaction.mutate({ messageId: message.id, conversationId, emoji });
+    }
+    setPickerOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      {/* Emoji picker toggle – only visible on group hover */}
+      <button
+        type="button"
+        onClick={() => setPickerOpen((p) => !p)}
+        className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-7 right-1 z-10 rounded-full border border-neutral-200 bg-white px-2 py-0.5 text-[11px] shadow-sm hover:bg-neutral-50"
+        title="React to message"
+      >
+        😊 +
+      </button>
+
+      {pickerOpen && (
+        <div className="absolute -top-14 right-0 z-20 flex gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2 shadow-lg">
+          {PRESET_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => toggle(emoji)}
+              className="text-lg transition-transform hover:scale-125 active:scale-110"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {reactions.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {reactions.map((reaction) => {
+            const reacted = reaction.users.includes(currentUserId);
+            return (
+              <button
+                key={reaction.emoji}
+                type="button"
+                onClick={() => toggle(reaction.emoji)}
+                title={reacted ? 'Remove reaction' : 'Add reaction'}
+                className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-xs transition
+                  ${reacted
+                    ? 'border-primary-300 bg-primary-50 text-primary-700'
+                    : 'border-neutral-200 bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
+                  }`}
+              >
+                <span>{reaction.emoji}</span>
+                <span className="text-[10px] font-semibold">{reaction.users.length}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Shared stable reference for the "no typing state" case - returning a fresh
 // {} literal from the selector below on every call makes useSyncExternalStore
@@ -25,6 +114,7 @@ export function ConversationTimeline() {
 
   const { emitRead } = useRealtime(user?.id);
   const markReadMutation = useMarkConversationRead();
+  const retryMessageMutation = useRetryMessage();
 
   const [splitMode, setSplitMode] = React.useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = React.useState<Set<string>>(new Set());
@@ -173,8 +263,29 @@ export function ConversationTimeline() {
                 />
               </div>
             )}
-            <div className={`flex-1 transition ${splitMode && selectedMessageIds.has(message.id) ? 'ring-2 ring-primary-500 rounded-lg p-1 bg-primary-50/50' : ''}`}>
+            <div className={`relative flex-1 transition ${splitMode && selectedMessageIds.has(message.id) ? 'ring-2 ring-primary-500 rounded-lg p-1 bg-primary-50/50' : ''}`}>
               <MessageBubble message={toMessageItem(message)} />
+              {message.status === 'failed' && activeConversationId && (
+                <div className="mt-1 flex items-center justify-end gap-1.5">
+                  <span className="text-[10px] text-danger font-semibold">Failed to send</span>
+                  <button
+                    type="button"
+                    onClick={() => retryMessageMutation.mutate({ messageId: message.id, conversationId: activeConversationId })}
+                    disabled={retryMessageMutation.isPending}
+                    className="inline-flex items-center gap-1 rounded-full border border-danger/30 bg-danger/5 px-2 py-0.5 text-[10px] font-bold text-danger hover:bg-danger/10 disabled:opacity-50 transition"
+                  >
+                    <RefreshCw className="h-2.5 w-2.5" />
+                    Retry
+                  </button>
+                </div>
+              )}
+              {activeConversationId && (
+                <MessageReactions
+                  message={message}
+                  conversationId={activeConversationId}
+                  currentUserId={user?.id ?? ''}
+                />
+              )}
             </div>
           </div>
         ))}

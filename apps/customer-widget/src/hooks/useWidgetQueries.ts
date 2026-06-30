@@ -391,6 +391,31 @@ export function useWidgetArticle(slug: string | null) {
   });
 }
 
+// 5b. TRACKING EVENTS
+export function useTrackWidgetEvent() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: (variables: { sessionId: string; eventName: string; eventData?: Record<string, unknown> }) =>
+      apiClient.post<{ id: string }>('/v1/widget/tracking/event', variables),
+  });
+}
+
+export function useTrackWidgetPageView() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: (variables: { sessionId: string; url: string; title?: string }) =>
+      apiClient.post<{ id: string }>('/v1/widget/tracking/page-view', variables),
+  });
+}
+
+export function useEndWidgetSession() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      apiClient.post<{ ended: boolean }>('/v1/widget/session/end', { sessionId }),
+  });
+}
+
 // 6. FEEDBACK / CSAT
 export function useSubmitWidgetFeedback() {
   const apiClient = useApiClient();

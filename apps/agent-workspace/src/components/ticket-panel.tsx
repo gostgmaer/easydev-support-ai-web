@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, Link2, XCircle } from 'lucide-react';
+import { CheckCircle2, Link2, X, XCircle } from 'lucide-react';
 import { TicketSidebar, AuditTimeline, Section, type TimelineEntry } from '@easydev/ui';
 import { Can } from '@easydev/permissions';
 import { useAuth } from '@easydev/auth';
 import { TicketApproval, ConversationPriority, Ticket } from '../types';
-import { useTicketByConversation, useUpdateTicket, useCreateTicket, useAddTicketComment, useTicketLifecycleAction, useDecideTicketApproval, useAssignTicket, useTransferTicket, useTeams, useAddTicketTag, useRemoveTicketTag, useAddTicketWatcher, useRemoveTicketWatcher } from '../hooks/useQueries';
+import { useTicketByConversation, useUpdateTicket, useCreateTicket, useAddTicketComment, useTicketLifecycleAction, useDecideTicketApproval, useCancelTicketApproval, useAssignTicket, useTransferTicket, useTeams, useAddTicketTag, useRemoveTicketTag, useAddTicketWatcher, useRemoveTicketWatcher, useTicketSla, useTicketAttachments } from '../hooks/useQueries';
 import { useInboxStore } from '../store/inboxStore';
 import { toTicketDetails } from '../lib/ui-adapters';
 
@@ -29,6 +29,7 @@ export function TicketPanel() {
   const addCommentMutation = useAddTicketComment();
   const lifecycleMutation = useTicketLifecycleAction();
   const decideApprovalMutation = useDecideTicketApproval();
+  const cancelApprovalMutation = useCancelTicketApproval();
   const assignMutation = useAssignTicket();
   const transferMutation = useTransferTicket();
   const addTagMutation = useAddTicketTag();
@@ -40,6 +41,8 @@ export function TicketPanel() {
   const [tagInput, setTagInput] = useState('');
 
   const { data: ticket, isLoading } = useTicketByConversation(activeConversationId);
+  const { data: slaDetail } = useTicketSla(ticket?.id ?? null);
+  const { data: attachments = [] } = useTicketAttachments(ticket?.id ?? null);
   const [commentText, setCommentText] = useState('');
 
   const activityEntries: TimelineEntry[] = useMemo(() => {
@@ -182,9 +185,23 @@ export function TicketPanel() {
         </div>
 
         <div className="flex items-center justify-between">
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${ticket.slaStatus ? SLA_COLORS[ticket.slaStatus] : 'bg-neutral-100 text-neutral-600 border-neutral-200'}`}>
-            SLA: {ticket.slaStatus ? ticket.slaStatus.replace('_', ' ') : 'N/A'}
-          </span>
+          <div className="flex flex-col gap-1">
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${ticket.slaStatus ? SLA_COLORS[ticket.slaStatus] : 'bg-neutral-100 text-neutral-600 border-neutral-200'}`}>
+              SLA: {ticket.slaStatus ? ticket.slaStatus.replace('_', ' ') : 'N/A'}
+            </span>
+            {slaDetail && (
+              <div className="text-[10px] text-neutral-400 space-y-0.5">
+                <div>First response: <span className={slaDetail.firstResponseSla.breached ? 'text-danger font-bold' : 'text-neutral-600'}>
+                  {new Date(slaDetail.firstResponseSla.dueAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {slaDetail.firstResponseSla.breached && ' (breached)'}
+                </span></div>
+                <div>Resolution: <span className={slaDetail.resolutionSla.breached ? 'text-danger font-bold' : 'text-neutral-600'}>
+                  {new Date(slaDetail.resolutionSla.dueAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {slaDetail.resolutionSla.breached && ' (breached)'}
+                </span></div>
+              </div>
+            )}
+          </div>
           <div className="flex flex-col items-end gap-2">
             <Can resource="ticket" action="update">
               <label htmlFor="ticket-escalated" className={`flex items-center gap-1 font-semibold ${ticket.escalated ? 'text-danger' : 'text-neutral-600'}`}>
@@ -324,6 +341,15 @@ export function TicketPanel() {
                       <button onClick={() => handleApprovalUpdate(app.id, 'rejected')} className="rounded p-1 text-danger hover:bg-danger/15" aria-label="Reject request">
                         <XCircle className="h-4 w-4" />
                       </button>
+                      <button
+                        onClick={() => cancelApprovalMutation.mutate({ approvalId: app.id, ticketId: ticket.id })}
+                        disabled={cancelApprovalMutation.isPending}
+                        className="rounded p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                        aria-label="Cancel approval request"
+                        title="Cancel request"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     </div>
                   </Can>
                 ) : (
@@ -353,6 +379,27 @@ export function TicketPanel() {
           <p className="text-xs italic text-neutral-400">No linked tickets.</p>
         )}
       </Section>
+
+      {attachments.length > 0 && (
+        <Section title="Attachments" className="p-4">
+          <div className="space-y-1.5">
+            {attachments.map((att) => (
+              <a
+                key={att.id}
+                href={att.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between rounded border border-neutral-100 bg-neutral-50 px-2.5 py-1.5 text-[10px] text-primary-600 hover:bg-neutral-100 transition"
+              >
+                <span className="font-semibold truncate max-w-[160px]">{att.fileName}</span>
+                <span className="text-neutral-400 ml-2 shrink-0">
+                  {att.mimeType.split('/')[1]?.toUpperCase()} • {(att.sizeBytes / 1024).toFixed(0)}KB
+                </span>
+              </a>
+            ))}
+          </div>
+        </Section>
+      )}
 
       <Section title="Add comment" className="p-4">
         <div className="space-y-2">

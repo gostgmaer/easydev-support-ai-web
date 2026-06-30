@@ -82,6 +82,7 @@ const SENDER_TYPE_TO_UI: Record<Message['senderType'], MessageSenderType> = {
 };
 
 function deliveryStateFor(message: Message): MessageDeliveryState {
+  if (message.status === 'failed') return 'FAILED';
   if (message.id.startsWith('temp-')) return 'SENDING';
   if (message.readReceipts && message.readReceipts.length > 0) return 'READ';
   return 'DELIVERED';

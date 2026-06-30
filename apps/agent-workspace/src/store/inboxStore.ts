@@ -19,6 +19,7 @@ export type InboxView = 'my' | 'team' | 'unassigned' | 'escalated' | 'bookmarks'
 interface InboxState {
   selectedView: InboxView;
   filters: InboxFilters;
+  activeSavedViewId: string | null;
   selectedConversationIds: string[];
   activeConversationId: string | null;
   conversations: Conversation[];
@@ -28,6 +29,7 @@ interface InboxState {
   savedViews: SavedInboxView[];
   bookmarkedIds: Set<string>;
   setSelectedView: (view: InboxView) => void;
+  setActiveSavedView: (id: string, filters: InboxFilters) => void;
   setFilters: (filters: InboxFilters) => void;
   updateFilters: (updates: Partial<InboxFilters>) => void;
   toggleSelectConversation: (id: string) => void;
@@ -47,6 +49,7 @@ interface InboxState {
 export const useInboxStore = create<InboxState>((set) => ({
   selectedView: 'my',
   filters: {},
+  activeSavedViewId: null,
   selectedConversationIds: [],
   activeConversationId: null,
   conversations: [],
@@ -55,7 +58,8 @@ export const useInboxStore = create<InboxState>((set) => ({
   isLoadingMore: false,
   savedViews: [],
   bookmarkedIds: new Set(),
-  setSelectedView: (view) => set({ selectedView: view, selectedConversationIds: [] }),
+  setSelectedView: (view) => set({ selectedView: view, activeSavedViewId: null, filters: {}, selectedConversationIds: [] }),
+  setActiveSavedView: (id, filters) => set({ activeSavedViewId: id, filters, selectedView: 'my', selectedConversationIds: [] }),
   setFilters: (filters) => set({ filters }),
   updateFilters: (updates) => set((state) => ({ filters: { ...state.filters, ...updates } })),
   toggleSelectConversation: (id) =>

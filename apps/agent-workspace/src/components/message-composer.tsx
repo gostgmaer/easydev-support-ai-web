@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Sparkles, AlertCircle } from 'lucide-react';
 import { useAuth } from '@easydev/auth';
 import { MessageComposer as MessageComposerPrimitive } from '@easydev/ui';
 import { useConversationStore } from '../store/conversationStore';
 import { useInboxStore } from '../store/inboxStore';
-import { useSendMessage, useMessageTemplates } from '../hooks/useQueries';
+import { useSendMessage, useMessageTemplates, useMyConversationDraft, useSaveDraft, useAiSuggestResponse } from '../hooks/useQueries';
 import { useRealtime } from '../hooks/useRealtime';
 
-const DRAFT_SAVE_DEBOUNCE_MS = 400;
+const DRAFT_SAVE_DEBOUNCE_MS = 800;
 
 export function MessageComposer() {
   const { user } = useAuth();
@@ -18,26 +19,41 @@ export function MessageComposer() {
 
   const [value, setValue] = useState(draft);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
   const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sendMessageMutation = useSendMessage();
   const { data: templates = [] } = useMessageTemplates();
   const { emitTyping } = useRealtime(user?.id);
+  const { data: serverDraft } = useMyConversationDraft(activeConversationId);
+  const saveDraftMutation = useSaveDraft();
+  const aiSuggestMutation = useAiSuggestResponse();
 
-  // Restore the in-progress draft when switching conversations (draft recovery).
+  // Restore draft: prefer local Zustand draft (typing in progress), fall back to server-persisted draft.
   useEffect(() => {
-    setValue(draft);
-  }, [activeConversationId, draft]);
+    if (draft) {
+      setValue(draft);
+    } else if (serverDraft?.content) {
+      setValue(serverDraft.content);
+      setDraft(activeConversationId!, serverDraft.content);
+    } else {
+      setValue('');
+    }
+  }, [activeConversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!activeConversationId) return null;
 
   const handleValueChange = (next: string) => {
     setValue(next);
+    setSuggestError(null);
     emitTyping(activeConversationId, next.length > 0);
 
     if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
     draftSaveTimeoutRef.current = setTimeout(() => {
       setDraft(activeConversationId, next);
+      if (next.trim()) {
+        saveDraftMutation.mutate({ conversationId: activeConversationId, content: next, isInternalNote: false });
+      }
     }, DRAFT_SAVE_DEBOUNCE_MS);
   };
 
@@ -59,8 +75,45 @@ export function MessageComposer() {
     setTemplatesOpen(false);
   };
 
+  const handleAiSuggest = () => {
+    setSuggestError(null);
+    aiSuggestMutation.mutate(
+      { conversationId: activeConversationId },
+      {
+        onSuccess: (result) => {
+          if (result.suggestion) {
+            handleValueChange(result.suggestion);
+          }
+        },
+        onError: () => setSuggestError('AI suggestion failed. Please try again.'),
+      },
+    );
+  };
+
   return (
     <div className="relative">
+      {/* AI Suggest toolbar */}
+      <div className="flex items-center justify-between px-3 pt-2 pb-0">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleAiSuggest}
+            disabled={aiSuggestMutation.isPending}
+            className="inline-flex items-center gap-1.5 text-[10px] font-bold text-primary-600 border border-primary-200 rounded-full px-2.5 py-1 hover:bg-primary-50 disabled:opacity-50 transition"
+            title="Ask AI to suggest a reply based on the conversation"
+          >
+            <Sparkles className={`h-3 w-3 ${aiSuggestMutation.isPending ? 'animate-pulse' : ''}`} />
+            {aiSuggestMutation.isPending ? 'Generating…' : 'AI Suggest'}
+          </button>
+          {suggestError && (
+            <span className="flex items-center gap-1 text-[10px] text-danger">
+              <AlertCircle className="h-3 w-3" />
+              {suggestError}
+            </span>
+          )}
+        </div>
+      </div>
+
       {templatesOpen && (
         <div className="absolute bottom-full left-3 z-10 mb-1 max-h-56 w-72 overflow-y-auto rounded-md border border-neutral-200 bg-white py-1 shadow-lg">
           {templates.length === 0 ? (

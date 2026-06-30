@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Settings, Image, Clock, ShieldAlert, Trash2, Plus, Building2, AlertTriangle, Copy, Eye, EyeOff, RefreshCw, Puzzle, Bell, Timer, Bot } from 'lucide-react';
+import { Settings, Image, Clock, ShieldAlert, Trash2, Plus, Building2, AlertTriangle, Copy, Eye, EyeOff, RefreshCw, Puzzle, Bell, Timer, Bot, Code2, Globe, CheckCircle2 } from 'lucide-react';
 import {
   useTenantSettings,
   useUpdateTenantSettings,
@@ -32,6 +32,9 @@ import {
   useUpdateAiSettings,
   useChannelSettings,
   useUpdateChannelSettings,
+  useWidgetInstallations,
+  useCreateWidgetInstallation,
+  useWidgetInstallationScript,
 } from '@/hooks/useAdminQueries';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -814,6 +817,27 @@ function SlaTab() {
   );
 }
 
+function WidgetInstallationScript({ installationId }: { installationId: string }) {
+  const { data, isLoading } = useWidgetInstallationScript(installationId);
+  const [copied, setCopied] = React.useState(false);
+  if (isLoading) return <p className="text-xs text-neutral-400 animate-pulse mt-2">Loading script…</p>;
+  if (!data?.script) return null;
+  return (
+    <div className="mt-2 relative">
+      <pre className="bg-neutral-900 text-green-400 text-[10px] rounded p-3 overflow-x-auto max-h-32 font-mono whitespace-pre-wrap break-all">
+        {data.script}
+      </pre>
+      <button
+        onClick={() => { navigator.clipboard.writeText(data.script); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+        className="absolute top-1.5 right-1.5 flex items-center gap-1 text-[9px] font-bold bg-neutral-700 hover:bg-neutral-600 text-white rounded px-1.5 py-0.5 transition"
+      >
+        {copied ? <CheckCircle2 className="h-2.5 w-2.5 text-success" /> : <Copy className="h-2.5 w-2.5" />}
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+    </div>
+  );
+}
+
 function WidgetTab() {
   const { data: config, isLoading: isConfigLoading } = useWidgetAdminConfig();
   const rotateMutation = useRotateWidgetIdentitySecret();
@@ -821,6 +845,12 @@ function WidgetTab() {
 
   const { data: settings, isLoading: isSettingsLoading } = useWidgetSettings();
   const updateMutation = useUpdateWidgetSettings();
+  const { data: installations = [], isLoading: instLoading, refetch: refetchInstallations } = useWidgetInstallations();
+  const createInstallation = useCreateWidgetInstallation();
+  const [selectedScriptId, setSelectedScriptId] = React.useState<string | null>(null);
+  const [showInstForm, setShowInstForm] = React.useState(false);
+  const [instName, setInstName] = React.useState('');
+  const [instDomain, setInstDomain] = React.useState('');
 
   const [form, setForm] = React.useState({
     widgetName: '',
@@ -998,6 +1028,81 @@ function WidgetTab() {
           <RefreshCw className="h-3.5 w-3.5" />
           <span>{rotateMutation.isPending ? 'Rotating...' : 'Rotate Secret'}</span>
         </button>
+      </div>
+
+      {/* Domain Installations */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-neutral-50 pb-2">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+            <Globe className="h-4 w-4 text-primary-500" />
+            <span>Domain Installations</span>
+          </h2>
+          <button
+            onClick={() => setShowInstForm((v) => !v)}
+            className="flex items-center gap-1 text-[10px] font-bold bg-neutral-800 hover:bg-neutral-900 text-white rounded px-2.5 py-1 transition"
+          >
+            <Plus className="h-3 w-3" />
+            Add
+          </button>
+        </div>
+
+        {showInstForm && (
+          <div className="border border-neutral-200 rounded-lg p-3 space-y-2 text-xs bg-neutral-50">
+            <input
+              value={instName}
+              onChange={(e) => setInstName(e.target.value)}
+              placeholder="Name (e.g. Production)"
+              className="w-full border border-neutral-200 rounded p-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <input
+              value={instDomain}
+              onChange={(e) => setInstDomain(e.target.value)}
+              placeholder="Domain (e.g. https://myapp.com)"
+              className="w-full border border-neutral-200 rounded p-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (!instName || !instDomain) return;
+                  createInstallation.mutate(
+                    { name: instName, domain: instDomain },
+                    { onSuccess: () => { setShowInstForm(false); setInstName(''); setInstDomain(''); refetchInstallations(); } },
+                  );
+                }}
+                disabled={createInstallation.isPending || !instName || !instDomain}
+                className="text-[10px] font-bold bg-primary-600 text-white rounded px-2.5 py-1 hover:bg-primary-700 disabled:opacity-50 transition"
+              >
+                {createInstallation.isPending ? 'Creating…' : 'Create'}
+              </button>
+              <button onClick={() => setShowInstForm(false)} className="text-[10px] text-neutral-500 hover:text-neutral-700">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {instLoading && <p className="text-xs text-neutral-400 animate-pulse">Loading installations…</p>}
+        {!instLoading && installations.length === 0 && (
+          <p className="text-xs italic text-neutral-400">No installations. Add one to get an embed script for your website.</p>
+        )}
+        <div className="space-y-2">
+          {installations.map((inst) => (
+            <div key={inst.id} className="border border-neutral-200 rounded p-3 space-y-1 hover:border-neutral-300 transition">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-neutral-800">{inst.name}</span>
+                  <span className="ml-2 text-[10px] text-neutral-400">{inst.domain}</span>
+                </div>
+                <button
+                  onClick={() => setSelectedScriptId(selectedScriptId === inst.id ? null : inst.id)}
+                  className="flex items-center gap-1 text-[10px] font-bold text-primary-600 border border-primary-200 rounded px-2 py-0.5 hover:bg-primary-50 transition"
+                >
+                  <Code2 className="h-3 w-3" />
+                  {selectedScriptId === inst.id ? 'Hide' : 'Script'}
+                </button>
+              </div>
+              {selectedScriptId === inst.id && <WidgetInstallationScript installationId={inst.id} />}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

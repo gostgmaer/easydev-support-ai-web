@@ -1,11 +1,11 @@
 import React, { useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AlarmClock, Bookmark, Bot, Clock, Sparkles } from 'lucide-react';
+import { AlarmClock, Bookmark, Bot, CheckCircle2, Clock, Sparkles, XCircle } from 'lucide-react';
 import { useAuth } from '@easydev/auth';
 import { useHasPermission } from '@easydev/permissions';
 import { ConversationCard, BulkActions, NoConversationsEmptyState, InboxLoading, ApiErrorState, type BulkAction } from '@easydev/ui';
 import { useInboxStore } from '../store/inboxStore';
-import { useAssignConversation, useBookmarkedConversationIds, useToggleBookmark, useToggleSnooze } from '../hooks/useQueries';
+import { useBulkAssign, useBulkResolveConversations, useBulkCloseConversations, useBulkTagConversations, useBookmarkedConversationIds, useToggleBookmark, useToggleSnooze } from '../hooks/useQueries';
 import { toConversationSummary } from '../lib/ui-adapters';
 import { Conversation } from '../types';
 
@@ -124,8 +124,12 @@ export function InboxList({ isLoading, isError, onRetry, hasMore, isFetchingMore
   const toggleBookmarkMutation = useToggleBookmark();
   const toggleSnoozeMutation = useToggleSnooze();
 
-  const assignMutation = useAssignConversation();
+  const bulkAssignMutation = useBulkAssign();
+  const bulkResolveMutation = useBulkResolveConversations();
+  const bulkCloseMutation = useBulkCloseConversations();
+  const bulkTagMutation = useBulkTagConversations();
   const canAssign = useHasPermission('conversation', 'assign');
+  const canResolve = useHasPermission('conversation', 'resolve');
   const parentRef = useRef<HTMLDivElement>(null);
 
   const rowVirtualizer = useVirtualizer({
@@ -151,8 +155,10 @@ export function InboxList({ isLoading, isError, onRetry, hasMore, isFetchingMore
             label: 'Claim selected',
             onAction: (selected: Conversation[]) => {
               if (!user) return;
-              selected.forEach((c) => assignMutation.mutate({ conversationId: c.id, agentId: user.id }));
-              clearSelection();
+              bulkAssignMutation.mutate(
+                { conversationIds: selected.map((c) => c.id), agentProfileId: user.id },
+                { onSuccess: clearSelection },
+              );
             },
           },
         ]
@@ -168,6 +174,43 @@ export function InboxList({ isLoading, isError, onRetry, hasMore, isFetchingMore
         clearSelection();
       },
     },
+    {
+      id: 'snooze',
+      label: 'Snooze selected',
+      icon: <AlarmClock className="h-3.5 w-3.5" />,
+      onAction: (selected) => {
+        selected.forEach((c) =>
+          toggleSnoozeMutation.mutate({ conversationId: c.id, snoozed: false }),
+        );
+        clearSelection();
+      },
+    },
+    ...(canResolve
+      ? [
+          {
+            id: 'resolve',
+            label: 'Resolve selected',
+            icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+            onAction: (selected: Conversation[]) => {
+              bulkResolveMutation.mutate(
+                selected.map((c) => c.id),
+                { onSuccess: clearSelection },
+              );
+            },
+          },
+          {
+            id: 'close',
+            label: 'Close selected',
+            icon: <XCircle className="h-3.5 w-3.5" />,
+            onAction: (selected: Conversation[]) => {
+              bulkCloseMutation.mutate(
+                { conversationIds: selected.map((c) => c.id) },
+                { onSuccess: clearSelection },
+              );
+            },
+          },
+        ]
+      : []),
   ];
 
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {

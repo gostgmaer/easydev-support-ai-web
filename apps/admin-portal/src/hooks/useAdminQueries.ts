@@ -457,6 +457,28 @@ export interface ChannelSettings {
 export const useChannelSettings = settingsQuery<ChannelSettings[]>('channels', '/v1/settings/channels');
 export const useUpdateChannelSettings = settingsMutation<ChannelSettings>('channels', '/v1/settings/channels', 'put');
 
+export function useChannelSettingsByType(channelType: string | null) {
+  const apiClient = useApiClient();
+  return useQuery<ChannelSettings>({
+    queryKey: ['admin', 'settings', 'channels', channelType],
+    queryFn: () => apiClient.get<ChannelSettings>(`/v1/settings/channels/${channelType}`),
+    enabled: !!channelType,
+  });
+}
+
+export function useUpdateChannelSettingsByType() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelType, ...dto }: ChannelSettings) =>
+      apiClient.put<ChannelSettings>(`/v1/settings/channels/${channelType}`, dto),
+    onSuccess: (_d, v) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'channels', v.channelType] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'channels'] });
+    },
+  });
+}
+
 // 5. INCIDENTS & HEALTH
 export function useIncidentsAlerts() {
   const apiClient = useApiClient();
@@ -613,6 +635,29 @@ export function useDeleteAgentProfile() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'agent-profiles'] });
     },
+  });
+}
+
+export interface AgentPerformanceMetrics {
+  agentId: string;
+  totalConversations: number;
+  resolvedConversations: number;
+  averageResponseTimeSeconds: number;
+  averageResolutionTimeSeconds: number;
+  csatScore?: number;
+  slaBreachRate: number;
+  period: { from: string; to: string };
+}
+
+export function useAgentPerformance(agentId: string | null, period?: { from: string; to: string }) {
+  const apiClient = useApiClient();
+  return useQuery<AgentPerformanceMetrics>({
+    queryKey: ['admin', 'agents', agentId, 'performance', period],
+    queryFn: () =>
+      apiClient.get<AgentPerformanceMetrics>(`/v1/admin/agents/${agentId}/performance`, {
+        query: period as Record<string, string> | undefined,
+      }),
+    enabled: !!agentId,
   });
 }
 
@@ -1072,6 +1117,46 @@ export function useRotateWidgetIdentitySecret() {
   return useMutation({
     mutationFn: () => apiClient.post<WidgetAdminConfig>('/v1/widget/config/admin/rotate-identity-secret'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'widget-config'] }),
+  });
+}
+
+// ─── WIDGET INSTALLATIONS ─────────────────────────────────────────────────────
+
+export interface WidgetInstallation {
+  id: string;
+  name: string;
+  domain: string;
+  allowedOrigins?: string[];
+  createdAt: string;
+}
+
+export function useWidgetInstallations() {
+  const apiClient = useApiClient();
+  return useQuery<WidgetInstallation[]>({
+    queryKey: ['admin', 'widget-installations'],
+    queryFn: () => apiClient.get<WidgetInstallation[]>('/v1/widget/installations'),
+  });
+}
+
+export function useCreateWidgetInstallation() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; domain: string; allowedOrigins?: string[] }) =>
+      apiClient.post<WidgetInstallation>('/v1/widget/installations', dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'widget-installations'] }),
+  });
+}
+
+export function useWidgetInstallationScript(installationId: string | null) {
+  const apiClient = useApiClient();
+  return useQuery<{ script: string; installationId: string }>({
+    queryKey: ['admin', 'widget-installations', installationId, 'script'],
+    queryFn: () =>
+      apiClient.get<{ script: string; installationId: string }>('/v1/widget/installations/script', {
+        query: { installationId: installationId! },
+      }),
+    enabled: !!installationId,
   });
 }
 
@@ -2336,6 +2421,7 @@ export interface AdminCustomer {
   externalId?: string;
   status: string;
   segmentIds: string[];
+  attributes?: Record<string, unknown>;
   createdAt: string;
 }
 
@@ -2408,6 +2494,16 @@ export function useExportCustomers() {
   });
 }
 
+export function useMergeCustomers() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ primaryId, duplicateId }: { primaryId: string; duplicateId: string }) =>
+      apiClient.post<AdminCustomer>('/v1/customers/merge', { primaryId, duplicateId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customers'] }),
+  });
+}
+
 export function useAdminCustomerTimeline(customerId: string | undefined) {
   const apiClient = useApiClient();
   return useQuery<{ type: string; data: Record<string, unknown>; createdAt: string }[]>({
@@ -2444,6 +2540,51 @@ export function useDeleteCustomerSegment() {
   return useMutation({
     mutationFn: (id: string) => apiClient.delete<void>(`/v1/customer-segments/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] }),
+  });
+}
+
+export function useUpdateCustomerSegment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: { id: string; name?: string; description?: string; rules?: Record<string, unknown> }) =>
+      apiClient.put<CustomerSegment>(`/v1/customer-segments/${id}`, dto),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] }),
+  });
+}
+
+export function useSegmentMembers(segmentId: string | null) {
+  const apiClient = useApiClient();
+  return useQuery<AdminCustomer[]>({
+    queryKey: ['admin', 'customer-segments', segmentId, 'members'],
+    queryFn: () => apiClient.get<AdminCustomer[]>(`/v1/customer-segments/${segmentId}/members`),
+    enabled: !!segmentId,
+  });
+}
+
+export function useAssignCustomerToSegment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ segmentId, customerId }: { segmentId: string; customerId: string }) =>
+      apiClient.post<void>(`/v1/customer-segments/${segmentId}/assign`, { customerId }),
+    onSuccess: (_d, v) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments', v.segmentId, 'members'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] });
+    },
+  });
+}
+
+export function useRemoveCustomerFromSegment() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ segmentId, customerId }: { segmentId: string; customerId: string }) =>
+      apiClient.post<void>(`/v1/customer-segments/${segmentId}/remove`, { customerId }),
+    onSuccess: (_d, v) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments', v.segmentId, 'members'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] });
+    },
   });
 }
 
