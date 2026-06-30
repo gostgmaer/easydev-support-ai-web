@@ -259,7 +259,7 @@ export function useRealtime(agentId?: string) {
       updateTicket(t.id, {
         status: mapTicketStatus(t.status),
         priority: mapInboxPriority(t.priority),
-        assigneeId: t.assignedAgentId,
+        assignedAgentId: t.assignedAgentId,
       });
       queryClient.invalidateQueries({ queryKey: ['ticket', t.id] });
       if (t.conversationId) {

@@ -199,6 +199,8 @@ export interface ConnectorExecution {
   startedAt?: string;
   completedAt?: string;
   createdAt: string;
+  requestPayload?: unknown;
+  responsePayload?: unknown;
 }
 
 export function useConnectorExecutions(connectorId: string | undefined) {

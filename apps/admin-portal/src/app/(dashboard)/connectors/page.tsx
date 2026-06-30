@@ -361,20 +361,20 @@ function ExecutionDetailPanel({ executionId }: { executionId: string }) {
   if (!exec) return null;
   return (
     <div className="bg-neutral-50 border border-neutral-100 rounded p-2 text-[10px] space-y-1 mt-1">
-      {exec.requestPayload && (
+      {!!exec.requestPayload && (
         <div>
           <span className="font-bold text-neutral-500 uppercase">Request: </span>
           <span className="font-mono break-all">{JSON.stringify(exec.requestPayload)}</span>
         </div>
       )}
-      {exec.responsePayload && (
+      {!!exec.responsePayload && (
         <div>
           <span className="font-bold text-neutral-500 uppercase">Response: </span>
           <span className="font-mono break-all">{JSON.stringify(exec.responsePayload)}</span>
         </div>
       )}
-      {exec.errorMessage && (
-        <div><span className="font-bold text-danger uppercase">Error: </span><span>{exec.errorMessage}</span></div>
+      {exec.error && (
+        <div><span className="font-bold text-danger uppercase">Error: </span><span>{exec.error}</span></div>
       )}
     </div>
   );

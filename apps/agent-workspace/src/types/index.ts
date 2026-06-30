@@ -129,6 +129,8 @@ export interface Ticket {
   tags: TicketTag[];
   watchers: TicketWatcher[];
   resolutionSummary?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Notification {

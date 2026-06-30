@@ -1710,14 +1710,6 @@ export function useMarkMessageRead() {
   });
 }
 
-export function useRetryMessage() {
-  const api = useApiClient();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (messageId: string) => api.post<{ messageId: string }>(`/v1/messages/${messageId}/retry`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inbox'] }),
-  });
-}
 
 export function useArchiveMessage() {
   const api = useApiClient();

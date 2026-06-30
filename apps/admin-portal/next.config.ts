@@ -37,7 +37,7 @@ const CSP = [
 ].join('; ');
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  // output: 'standalone',
   transpilePackages: [
     '@easydev/types',
     '@easydev/utils',
