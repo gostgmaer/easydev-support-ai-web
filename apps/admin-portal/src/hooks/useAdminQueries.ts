@@ -2591,77 +2591,7 @@ export function useAdminCustomerTimeline(customerId: string | undefined) {
   });
 }
 
-export function useCustomerSegments() {
-  const apiClient = useApiClient();
-  return useQuery<CustomerSegment[]>({
-    queryKey: ['admin', 'customer-segments'],
-    queryFn: () => apiClient.get<CustomerSegment[]>('/v1/customer-segments'),
-  });
-}
 
-export function useCreateCustomerSegment() {
-  const apiClient = useApiClient();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (dto: { name: string; description?: string; rules?: Record<string, unknown> }) =>
-      apiClient.post<CustomerSegment>('/v1/customer-segments', dto),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] }),
-  });
-}
-
-export function useDeleteCustomerSegment() {
-  const apiClient = useApiClient();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiClient.delete<void>(`/v1/customer-segments/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] }),
-  });
-}
-
-export function useUpdateCustomerSegment() {
-  const apiClient = useApiClient();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...dto }: { id: string; name?: string; description?: string; rules?: Record<string, unknown> }) =>
-      apiClient.put<CustomerSegment>(`/v1/customer-segments/${id}`, dto),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] }),
-  });
-}
-
-export function useSegmentMembers(segmentId: string | null) {
-  const apiClient = useApiClient();
-  return useQuery<AdminCustomer[]>({
-    queryKey: ['admin', 'customer-segments', segmentId, 'members'],
-    queryFn: () => apiClient.get<AdminCustomer[]>(`/v1/customer-segments/${segmentId}/members`),
-    enabled: !!segmentId,
-  });
-}
-
-export function useAssignCustomerToSegment() {
-  const apiClient = useApiClient();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ segmentId, customerId }: { segmentId: string; customerId: string }) =>
-      apiClient.post<void>(`/v1/customer-segments/${segmentId}/assign`, { customerId }),
-    onSuccess: (_d, v) => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments', v.segmentId, 'members'] });
-      queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] });
-    },
-  });
-}
-
-export function useRemoveCustomerFromSegment() {
-  const apiClient = useApiClient();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ segmentId, customerId }: { segmentId: string; customerId: string }) =>
-      apiClient.post<void>(`/v1/customer-segments/${segmentId}/remove`, { customerId }),
-    onSuccess: (_d, v) => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments', v.segmentId, 'members'] });
-      queryClient.invalidateQueries({ queryKey: ['admin', 'customer-segments'] });
-    },
-  });
-}
 
 // ─── SETTINGS — EXTENDED ─────────────────────────────────────────────────────
 
