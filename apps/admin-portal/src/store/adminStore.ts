@@ -66,6 +66,8 @@ export interface IncidentAlert {
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   status: 'OPEN' | 'INVESTIGATING' | 'MONITORING' | 'RESOLVED';
   createdAt: string;
+  description?: string;
+  affectedService?: string;
 }
 
 export interface Team {

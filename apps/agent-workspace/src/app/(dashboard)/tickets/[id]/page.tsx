@@ -101,7 +101,7 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
                 {startTicket.isPending ? 'Starting…' : 'Start'}
               </button>
             )}
-            {(ticket.status === 'open' || ticket.status === 'in_progress') && (
+            {ticket.status === 'open' && (
               <button
                 onClick={() => setPending.mutate({ ticketId: ticket.id })}
                 disabled={setPending.isPending}
@@ -111,7 +111,7 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
                 {setPending.isPending ? 'Setting…' : 'Set Pending'}
               </button>
             )}
-            {(ticket.status === 'resolved' || ticket.status === 'closed') && (
+            {(ticket.status === 'solved' || ticket.status === 'closed') && (
               <button
                 onClick={() => reopenTicket.mutate(ticket.id)}
                 disabled={reopenTicket.isPending}

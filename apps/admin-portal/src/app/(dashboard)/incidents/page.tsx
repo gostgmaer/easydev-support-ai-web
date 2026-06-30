@@ -226,7 +226,7 @@ export default function IncidentsPage() {
                   <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                     {incident.status !== 'RESOLVED' && (
                       <button
-                        onClick={() => resolveMutation.mutate(incident.id)}
+                        onClick={() => resolveMutation.mutate({ id: incident.id })}
                         disabled={resolveMutation.isPending}
                         className="inline-flex items-center gap-1 text-[10px] font-bold text-success border border-success/30 rounded px-2 py-1 hover:bg-success/10 disabled:opacity-50 transition"
                       >

@@ -318,7 +318,7 @@ export default function CustomersPage() {
   const [showSegmentDialog, setShowSegmentDialog] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<'customers' | 'segments'>('customers');
   const [form, setForm] = React.useState({ name: '', email: '', phone: '', externalId: '' });
-  const [segmentForm, setSegmentForm] = React.useState({ name: '', description: '' });
+  const [segmentForm, setSegmentForm] = React.useState<{ name: string; description: string; type: 'static' | 'dynamic' }>({ name: '', description: '', type: 'static' });
   const [expandedCustomer, setExpandedCustomer] = React.useState<string | null>(null);
   const [selectedSegment, setSelectedSegment] = React.useState<CustomerSegment | null>(null);
   const [editingSegment, setEditingSegment] = React.useState<CustomerSegment | null>(null);
@@ -367,7 +367,7 @@ export default function CustomersPage() {
     createSegment.mutate(segmentForm, {
       onSuccess: () => {
         setShowSegmentDialog(false);
-        setSegmentForm({ name: '', description: '' });
+        setSegmentForm({ name: '', description: '', type: 'static' });
       },
     });
   }

@@ -648,12 +648,12 @@ export function ConversationDetail({ showOpenLink = false }: ConversationDetailP
               <ActivityPanel conversationId={activeConversationId} />
             </TabsContent>
             <TabsContent value="knowledge">
-              <FeatureFlagGate flag="knowledge_base.enabled" is={true} requiredPermission="read">
+              <FeatureFlagGate flag="knowledge_base.enabled" is={true}>
                 <KnowledgePanel />
               </FeatureFlagGate>
             </TabsContent>
             <TabsContent value="workflow">
-              <FeatureFlagGate flag="workflow_orchestration.enabled" is={true} requiredPermission="read">
+              <FeatureFlagGate flag="workflow_orchestration.enabled" is={true}>
                 <WorkflowPanel />
               </FeatureFlagGate>
             </TabsContent>
