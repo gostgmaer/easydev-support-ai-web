@@ -8,6 +8,9 @@ import {
   useIncidentsAlerts,
   useQueueStats,
   useSystemHealthChecks,
+  useAdminAnnouncements,
+  useCreateAdminAnnouncement,
+  useDeactivateAdminAnnouncement,
 } from '@/hooks/useAdminQueries';
 import {
   MessageSquare,
@@ -17,7 +20,10 @@ import {
   Bot,
   Activity,
   AlertTriangle,
-  Server
+  Server,
+  Megaphone,
+  X,
+  Plus,
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
@@ -27,8 +33,15 @@ export default function AdminDashboardPage() {
   const { data: incidents = [], isLoading: isIncidentsLoading, isError: isIncidentsError } = useIncidentsAlerts();
   const { data: queues = [], isLoading: isQueuesLoading, isError: isQueuesError } = useQueueStats();
   const { data: healthChecks = [], isLoading: isHealthChecksLoading, isError: isHealthChecksError } = useSystemHealthChecks();
+  const { data: announcements = [] } = useAdminAnnouncements();
+  const createAnnouncement = useCreateAdminAnnouncement();
+  const deactivateAnnouncement = useDeactivateAdminAnnouncement();
+  const [showAnnouncementForm, setShowAnnouncementForm] = React.useState(false);
+  const [annForm, setAnnForm] = React.useState({ title: '', message: '', expiresAt: '' });
   const isHealthLoading = isQueuesLoading || isHealthChecksLoading;
   const isHealthError = isQueuesError || isHealthChecksError;
+
+  const activeAnnouncements = announcements.filter((a) => a.isActive);
 
   const getMetricCard = (title: string, value: string | number, desc: string, icon: React.ComponentType<{ className?: string }>, color: string) => {
     const Icon = icon;
@@ -138,6 +151,90 @@ export default function AdminDashboardPage() {
           ) : (
             <p className="text-xs text-neutral-400 italic py-6 text-center">No active platform incident warnings.</p>
           )}
+        </div>
+
+        {/* Announcements panel */}
+        <div className="bg-white border border-neutral-200/60 rounded-xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+              <Megaphone className="h-4 w-4" />
+              Announcements
+            </h2>
+            <button
+              onClick={() => setShowAnnouncementForm((v) => !v)}
+              className="flex items-center gap-1 text-[10px] font-bold text-primary-600 hover:text-primary-700"
+            >
+              <Plus className="h-3 w-3" />
+              New
+            </button>
+          </div>
+
+          {showAnnouncementForm && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                createAnnouncement.mutate(
+                  { title: annForm.title, message: annForm.message, expiresAt: annForm.expiresAt || undefined },
+                  { onSuccess: () => { setShowAnnouncementForm(false); setAnnForm({ title: '', message: '', expiresAt: '' }); } },
+                );
+              }}
+              className="space-y-2 text-xs border border-neutral-100 rounded-lg p-3 bg-neutral-50"
+            >
+              <input
+                value={annForm.title}
+                onChange={(e) => setAnnForm({ ...annForm, title: e.target.value })}
+                placeholder="Title"
+                required
+                className="w-full text-xs border border-neutral-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <textarea
+                value={annForm.message}
+                onChange={(e) => setAnnForm({ ...annForm, message: e.target.value })}
+                placeholder="Message"
+                required
+                rows={2}
+                className="w-full text-xs border border-neutral-200 rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <input
+                type="datetime-local"
+                value={annForm.expiresAt}
+                onChange={(e) => setAnnForm({ ...annForm, expiresAt: e.target.value })}
+                className="w-full text-xs border border-neutral-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                title="Expiry (optional)"
+              />
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={() => setShowAnnouncementForm(false)} className="text-[10px] text-neutral-500">Cancel</button>
+                <button type="submit" disabled={createAnnouncement.isPending} className="text-[10px] font-bold bg-primary-600 text-white rounded px-2 py-1 hover:bg-primary-700 disabled:opacity-50">
+                  {createAnnouncement.isPending ? 'Posting…' : 'Post'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {activeAnnouncements.length === 0 && !showAnnouncementForm && (
+            <p className="text-[10px] italic text-neutral-400 py-2">No active announcements.</p>
+          )}
+          <div className="space-y-2">
+            {activeAnnouncements.map((ann) => (
+              <div key={ann.id} className="flex items-start justify-between gap-3 rounded-lg border border-amber-100 bg-amber-50/50 p-3 text-xs">
+                <div className="min-w-0">
+                  <p className="font-semibold text-neutral-800">{ann.title}</p>
+                  <p className="text-neutral-600 mt-0.5">{ann.message}</p>
+                  {ann.expiresAt && (
+                    <p className="text-[10px] text-neutral-400 mt-1">Expires {new Date(ann.expiresAt).toLocaleDateString()}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => deactivateAnnouncement.mutate(ann.id)}
+                  disabled={deactivateAnnouncement.isPending}
+                  title="Deactivate"
+                  className="shrink-0 p-1 rounded hover:bg-amber-100 text-neutral-400 hover:text-neutral-700 disabled:opacity-50"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Worker health card */}

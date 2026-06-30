@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Bot, RefreshCw } from 'lucide-react';
+import { Bot, RefreshCw, CheckCheck, Trash2, Archive, MessageSquare, ChevronDown } from 'lucide-react';
 import { useAuth } from '@easydev/auth';
 import { MessageBubble, TypingIndicator, ConversationLoading } from '@easydev/ui';
 import { useConversationStore } from '../store/conversationStore';
@@ -12,12 +12,103 @@ import {
   useTicketByConversation,
   useAddMessageReaction,
   useRemoveMessageReaction,
+  useMarkMessageRead,
+  useDeleteMessage,
+  useArchiveMessage,
+  useMessageDelivery,
+  useThreadMessages,
 } from '../hooks/useQueries';
 import { useRealtime } from '../hooks/useRealtime';
 import { toMessageItem } from '../lib/ui-adapters';
 import type { Message } from '../types';
 
 const PRESET_EMOJIS = ['👍', '👎', '❤️', '😄', '😮'] as const;
+
+function MessageDeliveryBadge({ messageId }: { messageId: string }) {
+  const { data: delivery } = useMessageDelivery(messageId);
+  if (!delivery) return null;
+  const label = delivery.readAt ? 'Read' : delivery.deliveredAt ? 'Delivered' : delivery.status;
+  const tone = delivery.readAt ? 'text-success' : delivery.deliveredAt ? 'text-primary-500' : 'text-neutral-400';
+  return (
+    <span className={`flex items-center gap-0.5 text-[9px] font-semibold ${tone}`}>
+      <CheckCheck className="h-2.5 w-2.5" />
+      {label}
+    </span>
+  );
+}
+
+function ThreadPanel({ threadId, conversationId }: { threadId: string; conversationId: string }) {
+  const { data: threadMessages = [], isLoading } = useThreadMessages(threadId);
+  if (isLoading) return <p className="text-[10px] text-neutral-400 animate-pulse pl-4 pt-1">Loading thread…</p>;
+  if (threadMessages.length === 0) return null;
+  return (
+    <div className="pl-4 pt-1 space-y-1 border-l-2 border-primary-100 ml-4">
+      {threadMessages.map((msg) => (
+        <div key={msg.id} className="text-[10px] text-neutral-600 bg-neutral-50 rounded px-2 py-1">
+          <span className="font-semibold text-neutral-500">{msg.senderType}: </span>
+          {msg.content}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MessageActions({ message, conversationId }: { message: Message; conversationId: string }) {
+  const markRead = useMarkMessageRead();
+  const deleteMsg = useDeleteMessage();
+  const archiveMsg = useArchiveMessage();
+  const [showThread, setShowThread] = React.useState(false);
+  const threadId = (message as any).threadId as string | undefined;
+
+  return (
+    <div className="mt-0.5 space-y-1">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => markRead.mutate(message.id)}
+          disabled={markRead.isPending}
+          className="opacity-0 group-hover:opacity-100 inline-flex items-center gap-0.5 text-[9px] font-semibold text-neutral-400 hover:text-primary-600 transition-all disabled:opacity-30"
+          title="Mark as read"
+        >
+          <CheckCheck className="h-2.5 w-2.5" />
+        </button>
+        {threadId && (
+          <button
+            type="button"
+            onClick={() => setShowThread((v) => !v)}
+            className="opacity-0 group-hover:opacity-100 inline-flex items-center gap-0.5 text-[9px] font-semibold text-neutral-400 hover:text-primary-600 transition-all"
+            title="View thread"
+          >
+            <MessageSquare className="h-2.5 w-2.5" />
+            <ChevronDown className={`h-2 w-2 transition-transform ${showThread ? 'rotate-180' : ''}`} />
+          </button>
+        )}
+        <MessageDeliveryBadge messageId={message.id} />
+        <button
+          type="button"
+          onClick={() => archiveMsg.mutate(message.id)}
+          disabled={archiveMsg.isPending}
+          className="opacity-0 group-hover:opacity-100 inline-flex items-center text-[9px] text-neutral-400 hover:text-warning transition-all disabled:opacity-30"
+          title="Archive message"
+        >
+          <Archive className="h-2.5 w-2.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => { if (confirm('Delete this message?')) deleteMsg.mutate({ messageId: message.id, conversationId }); }}
+          disabled={deleteMsg.isPending}
+          className="opacity-0 group-hover:opacity-100 inline-flex items-center text-[9px] text-neutral-400 hover:text-danger transition-all disabled:opacity-30"
+          title="Delete message"
+        >
+          <Trash2 className="h-2.5 w-2.5" />
+        </button>
+      </div>
+      {showThread && threadId && (
+        <ThreadPanel threadId={threadId} conversationId={conversationId} />
+      )}
+    </div>
+  );
+}
 
 function MessageReactions({
   message,
@@ -285,6 +376,9 @@ export function ConversationTimeline() {
                   conversationId={activeConversationId}
                   currentUserId={user?.id ?? ''}
                 />
+              )}
+              {activeConversationId && (
+                <MessageActions message={message} conversationId={activeConversationId} />
               )}
             </div>
           </div>

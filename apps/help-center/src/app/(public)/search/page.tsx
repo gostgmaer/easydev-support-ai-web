@@ -3,9 +3,10 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useArticleSearch, useCategories } from '@/hooks/useHelpQueries';
+import { useArticleSearch, useCategories, useAskHelpAI } from '@/hooks/useHelpQueries';
 import { useSearchStore } from '@/store/searchStore';
-import { Search, HelpCircle, FileText, ChevronRight, X, Clock } from 'lucide-react';
+import { useAIHelpStore } from '@/store/aiHelpStore';
+import { Search, HelpCircle, FileText, ChevronRight, X, Clock, Bot, Sparkles } from 'lucide-react';
 import { Spinner, Input, Badge, Button } from '@easydev/ui';
 
 function SearchResultsContent() {
@@ -37,6 +38,10 @@ function SearchResultsContent() {
   }, [searchVal, addRecentSearch]);
 
   const { data: results, isFetching: isSearching } = useArticleSearch(debouncedVal, selectedCategory || undefined);
+  const askAI = useAskHelpAI();
+  const aiMessages = useAIHelpStore((state) => state.chatHistory);
+  const isAskingAI = useAIHelpStore((state) => state.isAskingAI);
+  const lastAiAnswer = aiMessages.filter((m) => m.sender === 'assistant').slice(-1)[0];
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,18 +132,46 @@ function SearchResultsContent() {
               <p className="text-neutral-400 text-[10px]">Search returns specific guides, troubleshooting wikis, and release fixes.</p>
             </div>
           ) : (!results || results.length === 0) ? (
-            <div className="p-8 text-center border border-neutral-200 rounded-xl bg-white space-y-3">
-              <HelpCircle className="h-8 w-8 text-neutral-300 mx-auto" />
-              <p className="font-bold text-neutral-800">No matching articles found</p>
-              <p className="text-neutral-400 text-[10px] max-w-sm mx-auto leading-relaxed">
-                We couldn't find any documents matching your search query. Try simplifying keywords, selecting another category, or ask our AI chatbot for assistance.
-              </p>
-              <div className="pt-2 flex justify-center gap-2">
+            <div className="p-6 border border-neutral-200 rounded-xl bg-white space-y-4">
+              <div className="flex items-center gap-3">
+                <HelpCircle className="h-6 w-6 text-neutral-300 shrink-0" />
+                <div>
+                  <p className="font-bold text-neutral-800 text-sm">No matching articles found</p>
+                  <p className="text-neutral-400 text-[10px] leading-relaxed">
+                    Try our AI assistant — it can answer directly from our knowledge base.
+                  </p>
+                </div>
+              </div>
+              {lastAiAnswer ? (
+                <div className="rounded-lg border border-primary-100 bg-primary-50/40 p-4 space-y-2">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-primary-600">
+                    <Bot className="h-3.5 w-3.5" />
+                    AI Answer
+                  </div>
+                  <p className="text-xs text-neutral-800 leading-relaxed">{lastAiAnswer.content}</p>
+                  <div className="flex gap-2 pt-1">
+                    <Link href="/contact-support">
+                      <Button size="sm" variant="outline" className="text-[10px] font-bold">Still need help?</Button>
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isAskingAI}
+                  onClick={() => askAI.mutate({ query: debouncedVal })}
+                  className="flex items-center gap-2 w-full rounded-lg border border-primary-200 bg-primary-50 px-4 py-3 text-xs font-semibold text-primary-700 hover:bg-primary-100 disabled:opacity-60 transition"
+                >
+                  {isAskingAI ? (
+                    <><Spinner className="h-3.5 w-3.5 text-primary-600" /> Asking AI…</>
+                  ) : (
+                    <><Sparkles className="h-3.5 w-3.5 text-cyan-500" /> Ask AI about "{debouncedVal}"</>
+                  )}
+                </button>
+              )}
+              <div className="flex justify-center gap-2 pt-1">
                 <Link href="/contact-support">
                   <Button size="sm" variant="outline" className="text-xs font-bold">Contact Support</Button>
-                </Link>
-                <Link href="/">
-                  <Button size="sm" className="bg-neutral-800 hover:bg-neutral-900 text-white text-xs font-bold">Home</Button>
                 </Link>
               </div>
             </div>

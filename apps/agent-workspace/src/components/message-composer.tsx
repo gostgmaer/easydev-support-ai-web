@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sparkles, AlertCircle } from 'lucide-react';
+import { Sparkles, AlertCircle, Send, Trash2 } from 'lucide-react';
 import { useAuth } from '@easydev/auth';
 import { MessageComposer as MessageComposerPrimitive } from '@easydev/ui';
 import { useConversationStore } from '../store/conversationStore';
 import { useInboxStore } from '../store/inboxStore';
-import { useSendMessage, useMessageTemplates, useMyConversationDraft, useSaveDraft, useAiSuggestResponse } from '../hooks/useQueries';
+import { useSendMessage, useMessageTemplates, useMyConversationDraft, useSaveDraft, useAiSuggestResponse, useSendDraft, useDeleteDraft } from '../hooks/useQueries';
 import { useRealtime } from '../hooks/useRealtime';
 
 const DRAFT_SAVE_DEBOUNCE_MS = 800;
@@ -27,6 +27,8 @@ export function MessageComposer() {
   const { emitTyping } = useRealtime(user?.id);
   const { data: serverDraft } = useMyConversationDraft(activeConversationId);
   const saveDraftMutation = useSaveDraft();
+  const sendDraftMutation = useSendDraft();
+  const deleteDraftMutation = useDeleteDraft();
   const aiSuggestMutation = useAiSuggestResponse();
 
   // Restore draft: prefer local Zustand draft (typing in progress), fall back to server-persisted draft.
@@ -112,6 +114,30 @@ export function MessageComposer() {
             </span>
           )}
         </div>
+        {serverDraft?.id && (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => sendDraftMutation.mutate({ draftId: serverDraft.id, conversationId: activeConversationId! }, { onSuccess: () => setValue('') })}
+              disabled={sendDraftMutation.isPending}
+              className="inline-flex items-center gap-1 text-[10px] font-bold text-success border border-success/30 rounded-full px-2.5 py-1 hover:bg-success/10 disabled:opacity-50 transition"
+              title="Send saved draft"
+            >
+              <Send className="h-3 w-3" />
+              {sendDraftMutation.isPending ? 'Sending…' : 'Send Draft'}
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteDraftMutation.mutate({ draftId: serverDraft.id, conversationId: activeConversationId! }, { onSuccess: () => setValue('') })}
+              disabled={deleteDraftMutation.isPending}
+              className="inline-flex items-center gap-1 text-[10px] font-bold text-danger border border-danger/30 rounded-full px-2.5 py-1 hover:bg-danger/10 disabled:opacity-50 transition"
+              title="Discard saved draft"
+            >
+              <Trash2 className="h-3 w-3" />
+              {deleteDraftMutation.isPending ? 'Deleting…' : 'Discard Draft'}
+            </button>
+          </div>
+        )}
       </div>
 
       {templatesOpen && (

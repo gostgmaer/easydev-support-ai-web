@@ -7,6 +7,7 @@ import {
   useCreateIncident,
   useUpdateIncidentStatus,
   useResolveIncident,
+  useIncidentById,
 } from '../../../hooks/useAdminQueries';
 import type { IncidentAlert } from '../../../store/adminStore';
 
@@ -26,6 +27,25 @@ const STATUS_STYLES: Record<IncidentAlert['status'], string> = {
 
 const STATUS_OPTIONS: IncidentAlert['status'][] = ['OPEN', 'INVESTIGATING', 'MONITORING', 'RESOLVED'];
 
+function IncidentDetailRow({ id }: { id: string }) {
+  const { data: incident, isLoading } = useIncidentById(id);
+  if (isLoading) return <tr><td colSpan={5} className="px-4 py-2 text-[10px] text-neutral-400 animate-pulse">Loading detail…</td></tr>;
+  if (!incident) return null;
+  return (
+    <tr className="bg-neutral-50">
+      <td colSpan={5} className="px-5 py-3 text-xs text-neutral-700 space-y-1.5">
+        {incident.description && (
+          <div><span className="font-semibold text-neutral-500 uppercase text-[10px]">Description: </span>{incident.description}</div>
+        )}
+        {incident.affectedService && (
+          <div><span className="font-semibold text-neutral-500 uppercase text-[10px]">Affected Service: </span><span className="font-mono">{incident.affectedService}</span></div>
+        )}
+        <div><span className="font-semibold text-neutral-500 uppercase text-[10px]">Incident ID: </span><span className="font-mono text-[10px]">{incident.id}</span></div>
+      </td>
+    </tr>
+  );
+}
+
 export default function IncidentsPage() {
   const { data: incidents = [], isLoading, isError, refetch } = useIncidentsAlerts();
   const createMutation = useCreateIncident();
@@ -33,6 +53,7 @@ export default function IncidentsPage() {
   const resolveMutation = useResolveIncident();
 
   const [showForm, setShowForm] = React.useState(false);
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [title, setTitle] = React.useState('');
   const [severity, setSeverity] = React.useState<IncidentAlert['severity']>('MEDIUM');
   const [description, setDescription] = React.useState('');
@@ -171,14 +192,18 @@ export default function IncidentsPage() {
             </thead>
             <tbody className="divide-y divide-neutral-100">
               {incidents.map((incident) => (
-                <tr key={incident.id} className="hover:bg-neutral-50 transition-colors">
+                <React.Fragment key={incident.id}>
+                <tr
+                  className="hover:bg-neutral-50 transition-colors cursor-pointer"
+                  onClick={() => setExpandedId((cur) => cur === incident.id ? null : incident.id)}
+                >
                   <td className="px-4 py-3 font-semibold text-neutral-800">{incident.title}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_STYLES[incident.severity]}`}>
                       {incident.severity}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <select
                       value={incident.status}
                       onChange={(e) =>
@@ -198,7 +223,7 @@ export default function IncidentsPage() {
                   <td className="px-4 py-3 text-neutral-500 tabular-nums">
                     {new Date(incident.createdAt).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                     {incident.status !== 'RESOLVED' && (
                       <button
                         onClick={() => resolveMutation.mutate(incident.id)}
@@ -214,6 +239,8 @@ export default function IncidentsPage() {
                     )}
                   </td>
                 </tr>
+                {expandedId === incident.id && <IncidentDetailRow id={incident.id} />}
+                </React.Fragment>
               ))}
             </tbody>
           </table>

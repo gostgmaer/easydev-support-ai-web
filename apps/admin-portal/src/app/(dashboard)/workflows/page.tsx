@@ -15,6 +15,11 @@ import {
   useUpdateWorkflowTemplate,
   useDeleteWorkflowTemplate,
   usePublishWorkflowTemplate,
+  useWorkflowApprovalsByExecution,
+  useApproveWorkflow,
+  useRejectWorkflow,
+  useWorkflowAudit,
+  useWorkflowTemplateById,
 } from '@/hooks/useAdminQueries';
 import type { WorkflowRule } from '@/store/adminStore';
 import type { WorkflowTemplate } from '@/hooks/useAdminQueries';
@@ -193,15 +198,108 @@ export default function WorkflowsPage() {
           <WorkflowSchedulesTab workflows={workflows} />
         )}
 
-        {/* 5. APPROVALS TAB - the real backend only exposes approvals per-execution
-            (GET /v1/workflows/approvals/execution/:id), not a tenant-wide pending
-            list, so this is an honest stub rather than a fake aggregation. */}
+        {/* 5. APPROVALS TAB */}
         {activeTab === 'approvals' && (
-          <div className="space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">Workflows Awaiting Approval</h2>
-            <p className="text-xs text-neutral-400 italic py-6 text-center">
-              A tenant-wide pending-approvals view isn&apos;t available yet - check the Executions tab and open an execution to review its approvals.
-            </p>
+          <WorkflowApprovalsTab />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── WORKFLOW APPROVALS TAB ──────────────────────────────────────────────────
+
+function WorkflowApprovalsTab() {
+  const [executionId, setExecutionId] = React.useState('');
+  const [lookupId, setLookupId] = React.useState('');
+  const { data: approvals = [], isLoading } = useWorkflowApprovalsByExecution(lookupId || undefined);
+  const { data: auditData, isLoading: auditLoading } = useWorkflowAudit();
+  const approveMutation = useApproveWorkflow();
+  const rejectMutation = useRejectWorkflow();
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-3">Execution Approvals</h2>
+        <div className="flex items-center gap-2 max-w-lg">
+          <input
+            value={executionId}
+            onChange={(e) => setExecutionId(e.target.value)}
+            placeholder="Enter execution ID…"
+            className="flex-1 border border-neutral-200 rounded p-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          <button
+            onClick={() => setLookupId(executionId.trim())}
+            disabled={!executionId.trim()}
+            className="text-xs font-bold bg-neutral-800 text-white rounded px-3 py-2 hover:bg-neutral-900 disabled:opacity-50"
+          >
+            Look up
+          </button>
+          {lookupId && <button onClick={() => { setLookupId(''); setExecutionId(''); }} className="text-xs text-neutral-400 hover:text-neutral-700">Clear</button>}
+        </div>
+      </div>
+
+      {lookupId && (
+        <div className="space-y-2">
+          {isLoading ? (
+            <p className="text-xs text-neutral-400 animate-pulse">Loading approvals…</p>
+          ) : approvals.length === 0 ? (
+            <p className="text-xs text-neutral-400 italic">No approvals found for this execution.</p>
+          ) : (
+            <div className="space-y-2">
+              {approvals.map((ap: { id: string; status: string; stepName?: string; createdAt: string }) => (
+                <div key={ap.id} className="flex items-center justify-between border border-neutral-200 rounded p-3 text-xs bg-white">
+                  <div className="space-y-0.5">
+                    <span className="font-semibold text-neutral-800">{ap.stepName || ap.id}</span>
+                    <p className="text-[10px] text-neutral-400">{new Date(ap.createdAt).toLocaleString()}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${ap.status === 'APPROVED' ? 'bg-success/15 text-success' : ap.status === 'REJECTED' ? 'bg-danger/15 text-danger' : 'bg-warning/15 text-warning'}`}>
+                      {ap.status}
+                    </span>
+                    {ap.status === 'PENDING' && (
+                      <>
+                        <button
+                          onClick={() => approveMutation.mutate({ id: ap.id })}
+                          disabled={approveMutation.isPending}
+                          className="text-xs font-bold text-success border border-success/30 rounded px-2 py-1 hover:bg-success/10 disabled:opacity-50"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => rejectMutation.mutate({ id: ap.id })}
+                          disabled={rejectMutation.isPending}
+                          className="text-xs font-bold text-danger border border-danger/30 rounded px-2 py-1 hover:bg-danger/10 disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="border-t border-neutral-100 pt-5">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-3">Workflow Audit Log</h2>
+        {auditLoading ? (
+          <p className="text-xs text-neutral-400 animate-pulse">Loading audit…</p>
+        ) : !auditData || auditData.data.length === 0 ? (
+          <p className="text-xs text-neutral-400 italic">No audit events.</p>
+        ) : (
+          <div className="space-y-1.5 max-h-60 overflow-y-auto">
+            {auditData.data.slice(0, 30).map((entry: { id: string; action: string; actorId?: string; createdAt: string }) => (
+              <div key={entry.id} className="flex items-center justify-between border border-neutral-100 rounded px-3 py-2 text-xs bg-white">
+                <span className="font-semibold text-neutral-700 capitalize">{entry.action.replace(/_/g, ' ')}</span>
+                <div className="flex items-center gap-3 text-[10px] text-neutral-400">
+                  {entry.actorId && <span>{entry.actorId}</span>}
+                  <span>{new Date(entry.createdAt).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -234,6 +332,8 @@ function WorkflowTemplatesTab({
 
   const [isCreating, setIsCreating] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string | null>(null);
+  const { data: templateDetail, isLoading: isTemplateDetailLoading } = useWorkflowTemplateById(selectedTemplateId ?? undefined);
   const [form, setForm] = React.useState({ name: '', description: '', triggerType: 'TICKET_CREATED', stepsJson: '[]' });
   const [formError, setFormError] = React.useState('');
 
@@ -398,7 +498,31 @@ function WorkflowTemplatesTab({
                       >
                         <Trash2 className="h-3 w-3" />Delete
                       </button>
+                      <button
+                        onClick={() => setSelectedTemplateId((cur) => cur === wf.id ? null : wf.id)}
+                        className="flex items-center gap-1 rounded border border-neutral-200 px-2 py-1 text-[10px] font-medium text-neutral-600 hover:bg-neutral-50"
+                      >
+                        {selectedTemplateId === wf.id ? 'Hide Detail' : 'View Detail'}
+                      </button>
                     </div>
+                    {selectedTemplateId === wf.id && (
+                      <div className="mt-2 border-t border-neutral-100 pt-2 space-y-1">
+                        {isTemplateDetailLoading ? (
+                          <p className="text-[10px] text-neutral-400 animate-pulse">Loading…</p>
+                        ) : templateDetail ? (
+                          <>
+                            <p className="text-[10px] text-neutral-500"><span className="font-bold">Status:</span> {templateDetail.status}</p>
+                            <p className="text-[10px] text-neutral-500"><span className="font-bold">Trigger:</span> {templateDetail.triggerType}</p>
+                            {templateDetail.steps.length > 0 && (
+                              <div className="text-[10px] text-neutral-500">
+                                <span className="font-bold">Steps ({templateDetail.steps.length}):</span>
+                                <pre className="mt-1 bg-neutral-50 rounded p-2 overflow-auto max-h-24 font-mono text-[9px]">{JSON.stringify(templateDetail.steps, null, 2)}</pre>
+                              </div>
+                            )}
+                          </>
+                        ) : null}
+                      </div>
+                    )}
                   </>
                 )}
               </div>

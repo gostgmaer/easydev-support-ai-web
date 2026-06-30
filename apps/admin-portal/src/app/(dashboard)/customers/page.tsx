@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Users, Plus, Search, Trash2, Download, Tag, X, History, ExternalLink, UserPlus, UserMinus, Pencil, ChevronRight, GitMerge } from 'lucide-react';
+import { Users, Plus, Search, Trash2, Download, Tag, X, History, ExternalLink, UserPlus, UserMinus, Pencil, ChevronRight, GitMerge, Upload } from 'lucide-react';
 import {
   useAdminCustomers,
   useAdminCustomerById,
@@ -17,6 +17,7 @@ import {
   useAssignCustomerToSegment,
   useRemoveCustomerFromSegment,
   useMergeCustomers,
+  useBulkImportCustomers,
   type AdminCustomer,
   type CustomerSegment,
 } from '../../../hooks/useAdminQueries';
@@ -335,6 +336,10 @@ export default function CustomersPage() {
   const createCustomer = useCreateAdminCustomer();
   const deleteCustomer = useDeleteAdminCustomer();
   const exportCustomers = useExportCustomers();
+  const bulkImport = useBulkImportCustomers();
+  const [showImportDialog, setShowImportDialog] = React.useState(false);
+  const [importCsv, setImportCsv] = React.useState('');
+  const [importResult, setImportResult] = React.useState<{ imported: number; errors: Array<{ row: number; message: string }> } | null>(null);
   const createSegment = useCreateCustomerSegment();
   const updateSegment = useUpdateCustomerSegment();
   const deleteSegment = useDeleteCustomerSegment();
@@ -411,6 +416,13 @@ export default function CustomersPage() {
             Export CSV
           </button>
           <button
+            onClick={() => { setImportCsv(''); setImportResult(null); setShowImportDialog(true); }}
+            className="flex items-center gap-1.5 text-xs border border-neutral-200 rounded px-3 py-1.5 text-neutral-700 hover:bg-neutral-50"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Bulk Import
+          </button>
+          <button
             onClick={() => setShowSegmentDialog(true)}
             className="flex items-center gap-1.5 text-xs border border-neutral-200 rounded px-3 py-1.5 text-neutral-700 hover:bg-neutral-50"
           >
@@ -426,6 +438,68 @@ export default function CustomersPage() {
           </button>
         </div>
       </div>
+
+      {/* Bulk Import Dialog */}
+      {showImportDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/50 backdrop-blur-sm" onClick={() => setShowImportDialog(false)}>
+          <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
+                <Upload className="h-4 w-4 text-neutral-500" />
+                Bulk Import Customers
+              </h3>
+              <button type="button" onClick={() => setShowImportDialog(false)} className="rounded p-1 hover:bg-neutral-100 text-neutral-400">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-[11px] text-neutral-500">
+              Paste JSON records (one per line or as an array). Each record may have: <code className="bg-neutral-100 px-1 rounded">name</code>, <code className="bg-neutral-100 px-1 rounded">email</code>, <code className="bg-neutral-100 px-1 rounded">phone</code>, <code className="bg-neutral-100 px-1 rounded">externalId</code>.
+            </p>
+            <textarea
+              value={importCsv}
+              onChange={(e) => setImportCsv(e.target.value)}
+              rows={8}
+              placeholder={`[{"name":"Jane Doe","email":"jane@example.com"},{"name":"John Smith","email":"john@example.com"}]`}
+              className="w-full text-xs rounded border border-neutral-200 px-3 py-2 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            {importResult && (
+              <div className={`rounded p-3 text-xs ${importResult.errors.length > 0 ? 'bg-warning-50 border border-warning-200' : 'bg-success-50 border border-success-200'}`}>
+                <p className="font-semibold">{importResult.imported} customer{importResult.imported !== 1 ? 's' : ''} imported.</p>
+                {importResult.errors.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-[10px] text-danger">
+                    {importResult.errors.map((err, i) => (
+                      <li key={i}>Row {err.row}: {err.message}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setShowImportDialog(false)} className="text-xs text-neutral-500 hover:text-neutral-800 px-3 py-1.5">Close</button>
+              <button
+                type="button"
+                disabled={!importCsv.trim() || bulkImport.isPending}
+                onClick={() => {
+                  try {
+                    const records = JSON.parse(importCsv.trim());
+                    const arr = Array.isArray(records) ? records : [records];
+                    bulkImport.mutate(arr, {
+                      onSuccess: (result) => setImportResult(result),
+                      onError: () => setImportResult({ imported: 0, errors: [{ row: 0, message: 'Import failed — check JSON format.' }] }),
+                    });
+                  } catch {
+                    setImportResult({ imported: 0, errors: [{ row: 0, message: 'Invalid JSON. Check your input.' }] });
+                  }
+                }}
+                className="flex items-center gap-1.5 text-xs font-bold bg-primary-600 text-white rounded px-3 py-1.5 hover:bg-primary-700 disabled:opacity-50 transition"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {bulkImport.isPending ? 'Importing…' : 'Import'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-neutral-200">

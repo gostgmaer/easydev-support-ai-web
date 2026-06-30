@@ -13,7 +13,9 @@ import {
   useCheckChannelHealth,
   useChannelTemplates,
   useCreateChannelTemplate,
-  useDeleteChannelTemplate
+  useDeleteChannelTemplate,
+  useChannelSettingsByType,
+  useUpdateChannelSettingsByType,
 } from '@/hooks/useAdminQueries';
 import type { CommunicationChannel } from '@/store/adminStore';
 
@@ -202,7 +204,7 @@ export default function ChannelsPage() {
                 </div>
                 
                 {expandedChannelId === chan.id && (
-                  <ChannelConfiguration channelId={chan.id} />
+                  <ChannelConfiguration channelId={chan.id} channelType={chan.type} />
                 )}
               </div>
             );
@@ -217,13 +219,59 @@ export default function ChannelsPage() {
   );
 }
 
-function ChannelConfiguration({ channelId }: { channelId: string }) {
-  const [tab, setTab] = React.useState<'config' | 'health' | 'templates'>('config');
+function ChannelTypeSettingsTab({ channelType }: { channelType: string }) {
+  const { data: settings, isLoading } = useChannelSettingsByType(channelType);
+  const updateMutation = useUpdateChannelSettingsByType();
+  const [form, setForm] = React.useState<{ businessHoursOnly: boolean; autoAssignmentEnabled: boolean }>({ businessHoursOnly: false, autoAssignmentEnabled: false });
+
+  React.useEffect(() => {
+    if (settings) {
+      setForm({ businessHoursOnly: settings.businessHoursOnly, autoAssignmentEnabled: settings.autoAssignmentEnabled });
+    }
+  }, [settings]);
+
+  if (isLoading) return <p className="text-xs text-neutral-400">Loading type settings…</p>;
+
+  return (
+    <div className="space-y-3 text-xs">
+      <p className="text-neutral-500">Settings that apply to all <span className="font-bold">{channelType}</span> channels on this tenant.</p>
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.businessHoursOnly}
+          onChange={(e) => setForm({ ...form, businessHoursOnly: e.target.checked })}
+          className="accent-primary-600 h-3.5 w-3.5"
+        />
+        <span>Business Hours Only</span>
+      </label>
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.autoAssignmentEnabled}
+          onChange={(e) => setForm({ ...form, autoAssignmentEnabled: e.target.checked })}
+          className="accent-primary-600 h-3.5 w-3.5"
+        />
+        <span>Auto Assignment Enabled</span>
+      </label>
+      <button
+        onClick={() => updateMutation.mutate({ channelType, enabled: settings?.enabled ?? true, ...form })}
+        disabled={updateMutation.isPending}
+        className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-1.5 px-3 rounded disabled:opacity-50"
+      >
+        {updateMutation.isPending ? 'Saving…' : 'Save Type Settings'}
+      </button>
+      {updateMutation.isSuccess && <p className="text-success">Saved.</p>}
+    </div>
+  );
+}
+
+function ChannelConfiguration({ channelId, channelType }: { channelId: string; channelType: string }) {
+  const [tab, setTab] = React.useState<'config' | 'health' | 'templates' | 'type-settings'>('config');
 
   return (
     <div className="border-t border-neutral-200 pt-4 mt-2 space-y-4">
-      <div className="flex gap-2">
-        {(['config', 'health', 'templates'] as const).map((t) => (
+      <div className="flex gap-2 flex-wrap">
+        {(['config', 'health', 'templates', 'type-settings'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -231,14 +279,15 @@ function ChannelConfiguration({ channelId }: { channelId: string }) {
               tab === t ? 'bg-primary-50 text-primary-600' : 'text-neutral-500 hover:bg-neutral-100'
             }`}
           >
-            {t}
+            {t === 'type-settings' ? 'Type Settings' : t}
           </button>
         ))}
       </div>
-      
+
       {tab === 'config' && <ChannelConfigTab channelId={channelId} />}
       {tab === 'health' && <ChannelHealthTab channelId={channelId} />}
       {tab === 'templates' && <ChannelTemplatesTab channelId={channelId} />}
+      {tab === 'type-settings' && <ChannelTypeSettingsTab channelType={channelType} />}
     </div>
   );
 }

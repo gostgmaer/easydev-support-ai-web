@@ -1,8 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Globe, Gauge, UserPlus, BarChart2, ChevronDown, Clock, CheckCircle, Star, AlertTriangle } from 'lucide-react';
-import { useAgentProfiles, useCreateAgentProfile, useUpdateAgentProfile, useDeleteAgentProfile, useProvisionAgentUser, useAgentPerformance } from '../../../hooks/useAdminQueries';
+import { Globe, Gauge, UserPlus, BarChart2, ChevronDown, Clock, CheckCircle, Star, AlertTriangle, Wifi } from 'lucide-react';
+import { useAgentProfiles, useCreateAgentProfile, useUpdateAgentProfile, useDeleteAgentProfile, useProvisionAgentUser, useAgentPerformance, useAgentAvailability, useUpdateAgentAvailability } from '../../../hooks/useAdminQueries';
 
 export default function AgentsPage() {
   const [search, setSearch] = React.useState('');
@@ -222,11 +222,53 @@ function AgentPerformancePanel({ agentId }: { agentId: string }) {
   );
 }
 
+const AVAILABILITY_STATUSES = ['online', 'offline', 'busy', 'away'] as const;
+
+function AgentAvailabilityPanel({ agentId }: { agentId: string }) {
+  const { data, isLoading } = useAgentAvailability(agentId);
+  const updateAvailability = useUpdateAgentAvailability();
+  const [newStatus, setNewStatus] = React.useState('');
+
+  React.useEffect(() => {
+    if (data?.status) setNewStatus(data.status);
+  }, [data?.status]);
+
+  if (isLoading) return <p className="text-[10px] text-neutral-400 py-2 animate-pulse">Loading availability...</p>;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-neutral-100 space-y-2">
+      <p className="text-[10px] font-bold uppercase text-neutral-500">Availability</p>
+      <div className="flex items-center gap-2">
+        <select
+          value={newStatus}
+          onChange={(e) => setNewStatus(e.target.value)}
+          className="border border-neutral-200 rounded p-1 text-xs bg-white flex-1"
+        >
+          {AVAILABILITY_STATUSES.map((s) => (
+            <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+          ))}
+        </select>
+        <button
+          disabled={updateAvailability.isPending || newStatus === data?.status}
+          onClick={() => updateAvailability.mutate({ agentProfileId: agentId, status: newStatus })}
+          className="text-[10px] font-bold bg-neutral-800 text-white rounded px-2 py-1 disabled:opacity-50 hover:bg-neutral-900"
+        >
+          {updateAvailability.isPending ? '…' : 'Save'}
+        </button>
+      </div>
+      {data?.timezone && (
+        <p className="text-[10px] text-neutral-400">Timezone: {data.timezone}</p>
+      )}
+    </div>
+  );
+}
+
 function AgentCard({ agent }: { agent: any }) {
   const updateAgentMutation = useUpdateAgentProfile();
   const deleteAgentMutation = useDeleteAgentProfile();
   const [isEditing, setIsEditing] = React.useState(false);
   const [showPerformance, setShowPerformance] = React.useState(false);
+  const [showAvailability, setShowAvailability] = React.useState(false);
   const [editForm, setEditForm] = React.useState({
     displayName: agent.displayName,
     employeeCode: agent.employeeCode || '',
@@ -334,6 +376,15 @@ function AgentCard({ agent }: { agent: any }) {
           <ChevronDown className={`h-3 w-3 transition-transform ${showPerformance ? 'rotate-180' : ''}`} />
         </button>
         {showPerformance && <AgentPerformancePanel agentId={agent.id} />}
+        <button
+          onClick={() => setShowAvailability((v) => !v)}
+          className="mt-2 flex w-full items-center justify-center gap-1 text-[10px] font-semibold text-neutral-500 hover:text-neutral-700 border-t border-neutral-100 pt-2 transition-colors"
+        >
+          <Wifi className="h-3 w-3" />
+          Availability
+          <ChevronDown className={`h-3 w-3 transition-transform ${showAvailability ? 'rotate-180' : ''}`} />
+        </button>
+        {showAvailability && <AgentAvailabilityPanel agentId={agent.id} />}
       </div>
     </div>
   );

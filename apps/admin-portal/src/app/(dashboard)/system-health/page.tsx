@@ -15,6 +15,9 @@ import {
   useRetryQueueJob,
   useDeadLetterQueue,
   useReplayDeadLetterJob,
+  useQueueDetail,
+  useQueueWorkers,
+  useWorkflowMonitoring,
 } from '@/hooks/useAdminQueries';
 
 export default function SystemHealthPage() {
@@ -24,6 +27,7 @@ export default function SystemHealthPage() {
   const resolveMutation = useResolveIncident();
   const { data: queues = [], isLoading: isQueuesLoading } = useQueueStats();
   const { data: healthChecks = [], isLoading: isHealthLoading } = useSystemHealthChecks();
+  const { data: workflowMonitor } = useWorkflowMonitoring();
   const { data: auditResult, isLoading: isAuditLoading } = useAuditLog();
   const auditLogs = auditResult?.data ?? [];
 
@@ -85,6 +89,20 @@ export default function SystemHealthPage() {
         {activeTab === 'health' && (
           <div className="space-y-6">
             <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">Platform Performance Stats</h2>
+
+            {workflowMonitor && Object.keys(workflowMonitor).length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-2">Workflow Status</h3>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(workflowMonitor).map(([key, count]) => (
+                    <div key={key} className="flex items-center gap-1.5 border border-neutral-100 bg-neutral-50 rounded px-3 py-1.5 text-xs">
+                      <span className="text-neutral-500 capitalize">{key.replace(/_/g, ' ')}</span>
+                      <span className="font-bold text-neutral-800">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {isQueuesLoading || isHealthLoading ? (
               <p className="text-center text-xs text-neutral-400 animate-pulse py-8">Loading health checks...</p>
@@ -219,6 +237,8 @@ function QueuesTab({ queues }: { queues: { name: string; active: number; waiting
   const retryMutation = useRetryQueueJob();
   const { data: deadLetterJobs = [], isLoading: isDeadLoading } = useDeadLetterQueue();
   const replayMutation = useReplayDeadLetterJob();
+  const { data: queueDetail, isLoading: isDetailLoading } = useQueueDetail(selectedQueue ?? undefined);
+  const { data: queueWorkers = [], isLoading: isWorkersLoading } = useQueueWorkers(selectedQueue ?? undefined);
 
   return (
     <div className="space-y-6 text-xs">
@@ -248,6 +268,45 @@ function QueuesTab({ queues }: { queues: { name: string; active: number; waiting
           ))}
         </div>
       </div>
+
+      {selectedQueue && queueDetail && !isDetailLoading && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Active', value: queueDetail.active ?? 0 },
+            { label: 'Waiting', value: queueDetail.waiting ?? 0 },
+            { label: 'Completed', value: queueDetail.completed ?? 0 },
+            { label: 'Failed', value: queueDetail.failed ?? 0 },
+          ].map(({ label, value }) => (
+            <div key={label} className="rounded border border-neutral-100 bg-white p-3 text-center">
+              <p className="text-[10px] font-bold uppercase text-neutral-400">{label}</p>
+              <p className="text-lg font-extrabold text-neutral-800 mt-0.5">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedQueue && (
+        <div className="space-y-2">
+          <h3 className="font-bold text-neutral-700 capitalize">{selectedQueue.replace(/-/g, ' ')} — Workers</h3>
+          {isWorkersLoading ? (
+            <p className="text-neutral-400 animate-pulse text-xs">Loading workers…</p>
+          ) : queueWorkers.length === 0 ? (
+            <p className="text-neutral-400 italic text-xs">No active workers for this queue.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {queueWorkers.map((w: { id: string; status?: string; addr?: string }) => (
+                <div key={w.id} className="flex items-center justify-between border border-neutral-100 bg-white rounded px-3 py-2 text-xs">
+                  <span className="font-mono text-neutral-700">{w.id}</span>
+                  <div className="flex items-center gap-2">
+                    {w.addr && <span className="text-neutral-400">{w.addr}</span>}
+                    {w.status && <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${w.status === 'active' ? 'bg-success/15 text-success' : 'bg-neutral-100 text-neutral-500'}`}>{w.status}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {selectedQueue && (
         <div className="space-y-3">

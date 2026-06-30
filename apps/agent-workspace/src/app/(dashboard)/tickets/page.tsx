@@ -2,11 +2,12 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Search, Ticket, CheckCircle2, Merge, RefreshCw } from 'lucide-react';
+import { Search, Ticket, CheckCircle2, Merge, RefreshCw, Hash } from 'lucide-react';
 import {
   useTicketList,
   useTicketBulkStatus,
   useMergeTickets,
+  useTicketByNumber,
 } from '../../../hooks/useQueries';
 import type { Ticket as TicketType } from '../../../types';
 
@@ -29,6 +30,11 @@ export default function TicketsPage() {
   const [mergeMode, setMergeMode] = React.useState(false);
   const [primaryId, setPrimaryId] = React.useState<string | null>(null);
   const [duplicateId, setDuplicateId] = React.useState<string | null>(null);
+  const [ticketNumberInput, setTicketNumberInput] = React.useState('');
+  const ticketNumber = ticketNumberInput !== '' ? Number(ticketNumberInput) : null;
+  const { data: ticketByNumber, isFetching: isFetchingByNumber } = useTicketByNumber(
+    ticketNumber != null && !Number.isNaN(ticketNumber) ? ticketNumber : null,
+  );
 
   React.useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(search), 300);
@@ -114,6 +120,33 @@ export default function TicketsPage() {
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
         </div>
+      </div>
+
+      {/* Quick lookup by ticket number */}
+      <div className="flex items-center gap-2 bg-white border border-neutral-200 rounded-lg px-4 py-3 shadow-xs text-xs">
+        <Hash className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
+        <input
+          type="number"
+          min={1}
+          value={ticketNumberInput}
+          onChange={(e) => setTicketNumberInput(e.target.value)}
+          placeholder="Jump to ticket #…"
+          className="flex-1 outline-none placeholder:text-neutral-400 text-xs"
+          aria-label="Lookup ticket by number"
+        />
+        {isFetchingByNumber && <span className="text-neutral-400 animate-pulse">Looking up…</span>}
+        {ticketByNumber && (
+          <Link
+            href={`/tickets/${ticketByNumber.id}`}
+            className="flex items-center gap-1 font-bold text-primary-600 hover:underline"
+          >
+            <Ticket className="h-3.5 w-3.5" />
+            {ticketByNumber.subject} →
+          </Link>
+        )}
+        {!isFetchingByNumber && ticketNumberInput && !ticketByNumber && (
+          <span className="text-neutral-400 italic">Not found</span>
+        )}
       </div>
 
       {/* Merge helper */}

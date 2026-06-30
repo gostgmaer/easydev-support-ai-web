@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Users, UserPlus, Archive, Settings, UserMinus, Plus } from 'lucide-react';
+import { Users, UserPlus, Archive, Settings, UserMinus, Plus, ArrowRightLeft } from 'lucide-react';
 import {
   useTeams,
   useCreateTeam,
@@ -10,19 +10,26 @@ import {
   useAddTeamAgent,
   useUpdateTeamAgentRole,
   useRemoveTeamAgent,
+  useTransferTeamConversations,
 } from '../../../hooks/useAdminQueries';
 import type { Team } from '../../../store/adminStore';
 
 const MEMBER_ROLES = ['MEMBER', 'LEADER'] as const;
 
-function TeamMembersPanel({ team }: { team: Team }) {
+function TeamMembersPanel({ team, allTeams }: { team: Team; allTeams: Team[] }) {
   const { data: agentProfiles = [], isLoading: isAgentsLoading } = useAgentProfiles();
   const addAgentMutation = useAddTeamAgent();
   const updateRoleMutation = useUpdateTeamAgentRole();
   const removeAgentMutation = useRemoveTeamAgent();
+  const transferMutation = useTransferTeamConversations();
 
   const [selectedAgentId, setSelectedAgentId] = React.useState('');
   const [selectedRole, setSelectedRole] = React.useState<typeof MEMBER_ROLES[number]>('MEMBER');
+  const [showTransfer, setShowTransfer] = React.useState(false);
+  const [transferTargetId, setTransferTargetId] = React.useState('');
+  const [transferResult, setTransferResult] = React.useState<string | null>(null);
+
+  const otherActiveTeams = allTeams.filter((t) => t.id !== team.id && t.isActive);
 
   const agentsById = React.useMemo(
     () => new Map(agentProfiles.map((a) => [a.id, a])),
@@ -140,6 +147,49 @@ function TeamMembersPanel({ team }: { team: Team }) {
             <Plus className="h-3.5 w-3.5" /> Add
           </button>
         </form>
+      )}
+
+      {/* Transfer conversations */}
+      {otherActiveTeams.length > 0 && (
+        <div className="pt-3 border-t border-neutral-100">
+          <button
+            onClick={() => { setShowTransfer((v) => !v); setTransferResult(null); }}
+            className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-500 hover:text-neutral-700"
+          >
+            <ArrowRightLeft className="h-3.5 w-3.5" />
+            Transfer all conversations to another team
+          </button>
+          {showTransfer && (
+            <div className="mt-2 flex items-center gap-2">
+              <select
+                value={transferTargetId}
+                onChange={(e) => setTransferTargetId(e.target.value)}
+                className="border border-neutral-200 rounded p-1.5 text-xs bg-white flex-1"
+              >
+                <option value="">Select target team…</option>
+                {otherActiveTeams.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              <button
+                disabled={!transferTargetId || transferMutation.isPending}
+                onClick={() => {
+                  if (!transferTargetId) return;
+                  transferMutation.mutate(
+                    { teamId: team.id, toTeamId: transferTargetId },
+                    {
+                      onSuccess: (data) => setTransferResult(`${data.transferred} conversation(s) transferred.`),
+                    },
+                  );
+                }}
+                className="text-xs font-bold bg-neutral-800 text-white rounded px-3 py-1.5 disabled:opacity-50 hover:bg-neutral-900"
+              >
+                {transferMutation.isPending ? 'Transferring…' : 'Transfer'}
+              </button>
+            </div>
+          )}
+          {transferResult && <p className="mt-1 text-[11px] text-success font-semibold">{transferResult}</p>}
+        </div>
       )}
     </div>
   );
@@ -310,7 +360,7 @@ export default function TeamsPage() {
                   </div>
                 )}
 
-                {expandedTeamId === team.id && <TeamMembersPanel team={team} />}
+                {expandedTeamId === team.id && <TeamMembersPanel team={team} allTeams={teams} />}
               </div>
             ))
           )}

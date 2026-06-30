@@ -11,6 +11,8 @@ import {
   useCreateAiAgent,
   useUpdateAiAgent,
   useDeleteAiAgent,
+  useAdminAiEscalations,
+  useResolveAdminAiEscalation,
   type AiAgent,
 } from '@/hooks/useAdminQueries';
 
@@ -22,6 +24,8 @@ export default function AiPage() {
   const { data: aiMetrics } = useAnalyticsAiMetrics('Last 30 Days');
 
   const [activeTab, setActiveTab] = React.useState<'agents' | 'workflows' | 'escalations' | 'costs'>('agents');
+  const { data: pendingEscalations = [], isLoading: isEscalationsLoading } = useAdminAiEscalations('pending');
+  const resolveEscalation = useResolveAdminAiEscalation();
 
   // Local edit buffers, seeded from the real settings once loaded.
   const [confidencePct, setConfidencePct] = React.useState(70);
@@ -210,6 +214,34 @@ export default function AiPage() {
             >
               {updateMutation.isPending ? 'Saving...' : 'Save Configuration'}
             </button>
+
+            {/* Live escalation queue */}
+            <div className="mt-6 border-t border-neutral-100 pt-6 space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                Pending Escalations ({pendingEscalations.length})
+              </h3>
+              {isEscalationsLoading && <p className="text-xs text-neutral-400 animate-pulse">Loading…</p>}
+              {!isEscalationsLoading && pendingEscalations.length === 0 && (
+                <p className="text-xs italic text-neutral-400">No pending escalations.</p>
+              )}
+              {pendingEscalations.map((esc) => (
+                <div key={esc.id} className="flex items-start justify-between gap-3 rounded-lg border border-warning/20 bg-warning/5 p-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-neutral-800">Conversation: <span className="font-mono">{esc.conversationId}</span></p>
+                    <p className="text-[10px] text-neutral-500 mt-0.5">{esc.reason}</p>
+                    <p className="text-[10px] text-neutral-400">{new Date(esc.createdAt).toLocaleString()}</p>
+                  </div>
+                  <button
+                    onClick={() => resolveEscalation.mutate(esc.id)}
+                    disabled={resolveEscalation.isPending}
+                    className="flex items-center gap-1 shrink-0 text-[10px] font-bold text-success border border-success/20 rounded px-2 py-1 hover:bg-success/10 disabled:opacity-50 transition"
+                  >
+                    <Check className="h-3 w-3" />
+                    Resolve
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

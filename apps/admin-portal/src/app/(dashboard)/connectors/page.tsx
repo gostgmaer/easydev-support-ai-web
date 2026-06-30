@@ -13,6 +13,15 @@ import {
   useConnectorExecutions,
   useRetryConnectorExecution,
   useConnectorWebhooks,
+  useImportConnectorOpenApi,
+  useImportConnectorSwagger,
+  useCheckConnectorHealth,
+  useConnectorInstances,
+  useCreateConnectorInstance,
+  useDeleteConnectorInstance,
+  useConnectorAuditLog,
+  useConnectorExecutionById,
+  useMapConnectorCapabilities,
 } from '@/hooks/useAdminQueries';
 import type { Connector } from '@/store/adminStore';
 
@@ -346,9 +355,35 @@ function ConfigureConnectorForm({ connector }: { connector: Connector }) {
   );
 }
 
+function ExecutionDetailPanel({ executionId }: { executionId: string }) {
+  const { data: exec, isLoading } = useConnectorExecutionById(executionId);
+  if (isLoading) return <p className="text-[10px] text-neutral-400 animate-pulse p-2">Loading detail…</p>;
+  if (!exec) return null;
+  return (
+    <div className="bg-neutral-50 border border-neutral-100 rounded p-2 text-[10px] space-y-1 mt-1">
+      {exec.requestPayload && (
+        <div>
+          <span className="font-bold text-neutral-500 uppercase">Request: </span>
+          <span className="font-mono break-all">{JSON.stringify(exec.requestPayload)}</span>
+        </div>
+      )}
+      {exec.responsePayload && (
+        <div>
+          <span className="font-bold text-neutral-500 uppercase">Response: </span>
+          <span className="font-mono break-all">{JSON.stringify(exec.responsePayload)}</span>
+        </div>
+      )}
+      {exec.errorMessage && (
+        <div><span className="font-bold text-danger uppercase">Error: </span><span>{exec.errorMessage}</span></div>
+      )}
+    </div>
+  );
+}
+
 function ExecutionHistory({ connectorId }: { connectorId: string }) {
   const { data: executions = [], isLoading } = useConnectorExecutions(connectorId);
   const retryMutation = useRetryConnectorExecution();
+  const [expandedExecId, setExpandedExecId] = React.useState<string | null>(null);
 
   return (
     <div className="mt-3 border-t border-neutral-200 pt-3 text-xs space-y-2">
@@ -364,29 +399,32 @@ function ExecutionHistory({ connectorId }: { connectorId: string }) {
             const isRetryingThis =
               retryMutation.isPending && retryMutation.variables?.executionId === exec.id;
             return (
-              <li
-                key={exec.id}
-                className="flex items-center justify-between gap-3 p-2 border border-neutral-200 rounded bg-white"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded shrink-0 ${EXECUTION_STATUS_TONE[exec.status] ?? 'text-neutral-500 bg-neutral-100'}`}>
-                    {exec.status}
-                  </span>
-                  <span className="text-neutral-700 font-semibold truncate">{exec.capabilityType}</span>
-                  <span className="text-neutral-400 shrink-0">
-                    attempt {exec.attempt} • {new Date(exec.createdAt).toLocaleString()}
-                  </span>
+              <li key={exec.id} className="border border-neutral-200 rounded bg-white">
+                <div
+                  className="flex items-center justify-between gap-3 p-2 cursor-pointer hover:bg-neutral-50"
+                  onClick={() => setExpandedExecId((cur) => cur === exec.id ? null : exec.id)}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded shrink-0 ${EXECUTION_STATUS_TONE[exec.status] ?? 'text-neutral-500 bg-neutral-100'}`}>
+                      {exec.status}
+                    </span>
+                    <span className="text-neutral-700 font-semibold truncate">{exec.capabilityType}</span>
+                    <span className="text-neutral-400 shrink-0">
+                      attempt {exec.attempt} • {new Date(exec.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  {canRetry && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); retryMutation.mutate({ connectorId, executionId: exec.id }); }}
+                      disabled={isRetryingThis}
+                      className="flex items-center gap-1 text-primary-600 hover:text-primary-700 font-semibold shrink-0 disabled:opacity-60"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${isRetryingThis ? 'animate-spin' : ''}`} />
+                      {isRetryingThis ? 'Retrying...' : 'Retry'}
+                    </button>
+                  )}
                 </div>
-                {canRetry && (
-                  <button
-                    onClick={() => retryMutation.mutate({ connectorId, executionId: exec.id })}
-                    disabled={isRetryingThis}
-                    className="flex items-center gap-1 text-primary-600 hover:text-primary-700 font-semibold shrink-0 disabled:opacity-60"
-                  >
-                    <RefreshCw className={`h-3 w-3 ${isRetryingThis ? 'animate-spin' : ''}`} />
-                    {isRetryingThis ? 'Retrying...' : 'Retry'}
-                  </button>
-                )}
+                {expandedExecId === exec.id && <ExecutionDetailPanel executionId={exec.id} />}
               </li>
             );
           })}
@@ -396,6 +434,160 @@ function ExecutionHistory({ connectorId }: { connectorId: string }) {
         <p className="text-danger-600 bg-danger/10 border border-danger/20 rounded p-2">
           {toAppError(retryMutation.error).message}
         </p>
+      )}
+    </div>
+  );
+}
+
+function ConnectorCapabilitiesPanel({ connectorId }: { connectorId: string }) {
+  const mapCapabilities = useMapConnectorCapabilities();
+  const [rows, setRows] = React.useState([{ type: '', endpoint: '', method: 'GET' }]);
+
+  const addRow = () => setRows((r) => [...r, { type: '', endpoint: '', method: 'GET' }]);
+  const updateRow = (i: number, field: string, value: string) =>
+    setRows((r) => r.map((row, idx) => idx === i ? { ...row, [field]: value } : row));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const valid = rows.filter((r) => r.type.trim() && r.endpoint.trim() && r.method.trim());
+    if (!valid.length) return;
+    mapCapabilities.mutate(
+      { id: connectorId, capabilities: valid.map((r) => ({ type: r.type.trim(), endpoint: r.endpoint.trim(), method: r.method.trim() })) },
+      { onSuccess: () => setRows([{ type: '', endpoint: '', method: 'GET' }]) },
+    );
+  };
+
+  return (
+    <div className="mt-3 border-t border-neutral-200 pt-3 text-xs space-y-2">
+      <h3 className="font-bold text-neutral-600">Map Capabilities</h3>
+      <p className="text-neutral-400">Define the capability types this connector exposes (e.g. get_order, list_products).</p>
+      <form onSubmit={handleSubmit} className="space-y-2">
+        {rows.map((row, i) => (
+          <div key={i} className="grid grid-cols-3 gap-2">
+            <input value={row.type} onChange={(e) => updateRow(i, 'type', e.target.value)} placeholder="Type (e.g. get_order)" className="border border-neutral-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+            <input value={row.endpoint} onChange={(e) => updateRow(i, 'endpoint', e.target.value)} placeholder="Endpoint (/orders/:id)" className="border border-neutral-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+            <select value={row.method} onChange={(e) => updateRow(i, 'method', e.target.value)} className="border border-neutral-200 rounded px-2 py-1.5 bg-white">
+              {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+        ))}
+        <div className="flex items-center gap-2 pt-1">
+          <button type="button" onClick={addRow} className="text-[10px] font-bold text-primary-600 hover:underline">+ Add Row</button>
+          <button type="submit" disabled={mapCapabilities.isPending} className="bg-neutral-800 hover:bg-neutral-900 text-white font-bold text-[10px] rounded px-3 py-1.5 disabled:opacity-50">
+            {mapCapabilities.isPending ? 'Saving…' : 'Save Capabilities'}
+          </button>
+          {mapCapabilities.isSuccess && <span className="text-success">Saved.</span>}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ConnectorHealthPanel({ connectorId }: { connectorId: string }) {
+  const checkHealth = useCheckConnectorHealth();
+  const [result, setResult] = React.useState<{ status: string; latencyMs: number } | null>(null);
+  return (
+    <div className="mt-3 border-t border-neutral-200 pt-3 text-xs space-y-2">
+      <h3 className="font-bold text-neutral-600">Health Check</h3>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => checkHealth.mutate(connectorId, { onSuccess: setResult })}
+          disabled={checkHealth.isPending}
+          className="flex items-center gap-1.5 text-xs font-bold border border-neutral-200 rounded px-3 py-1.5 hover:bg-neutral-50 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3 w-3 ${checkHealth.isPending ? 'animate-spin' : ''}`} />
+          {checkHealth.isPending ? 'Checking…' : 'Run Health Check'}
+        </button>
+        {result && (
+          <span className={`font-semibold ${result.status === 'healthy' ? 'text-success' : 'text-danger'}`}>
+            {result.status} · {result.latencyMs}ms
+          </span>
+        )}
+        {checkHealth.isError && <span className="text-danger">Health check failed.</span>}
+      </div>
+    </div>
+  );
+}
+
+function ConnectorInstancesPanel({ connectorId }: { connectorId: string }) {
+  const { data: instances = [], isLoading } = useConnectorInstances(connectorId);
+  const createInstance = useCreateConnectorInstance();
+  const deleteInstance = useDeleteConnectorInstance();
+  const [newName, setNewName] = React.useState('');
+
+  return (
+    <div className="mt-3 border-t border-neutral-200 pt-3 text-xs space-y-2">
+      <h3 className="font-bold text-neutral-600">Instances</h3>
+      {isLoading ? (
+        <p className="text-neutral-400">Loading instances…</p>
+      ) : instances.length === 0 ? (
+        <p className="text-neutral-400">No instances created.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {instances.map((inst) => (
+            <li key={inst.id} className="flex items-center justify-between gap-2 p-2 border border-neutral-100 rounded bg-white">
+              <div>
+                <span className="font-semibold text-neutral-800">{inst.instanceName}</span>
+                <span className={`ml-2 text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${inst.status === 'ACTIVE' ? 'text-success bg-success/15' : 'text-neutral-500 bg-neutral-100'}`}>
+                  {inst.status}
+                </span>
+              </div>
+              <button
+                onClick={() => { if (confirm(`Delete instance "${inst.instanceName}"?`)) deleteInstance.mutate({ connectorId, instanceId: inst.id }); }}
+                disabled={deleteInstance.isPending}
+                className="text-danger hover:underline text-[10px] font-bold disabled:opacity-50"
+              >
+                Delete
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!newName.trim()) return;
+          createInstance.mutate({ connectorId, instanceName: newName.trim() }, { onSuccess: () => setNewName('') });
+        }}
+        className="flex items-center gap-2 pt-1"
+      >
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Instance name…"
+          className="flex-1 border border-neutral-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+        <button
+          type="submit"
+          disabled={!newName.trim() || createInstance.isPending}
+          className="text-xs font-bold bg-neutral-800 text-white rounded px-2.5 py-1.5 hover:bg-neutral-900 disabled:opacity-50"
+        >
+          {createInstance.isPending ? 'Creating…' : 'Add Instance'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function ConnectorAuditPanel({ connectorId }: { connectorId: string }) {
+  const { data, isLoading } = useConnectorAuditLog(connectorId);
+  const records = data?.data ?? [];
+  return (
+    <div className="mt-3 border-t border-neutral-200 pt-3 text-xs space-y-2">
+      <h3 className="font-bold text-neutral-600">Audit Log</h3>
+      {isLoading ? (
+        <p className="text-neutral-400">Loading audit log…</p>
+      ) : records.length === 0 ? (
+        <p className="text-neutral-400">No audit events.</p>
+      ) : (
+        <ul className="space-y-1 max-h-40 overflow-y-auto">
+          {records.slice(0, 20).map((r) => (
+            <li key={r.id} className="flex items-center justify-between gap-2 p-1.5 border border-neutral-100 rounded bg-white">
+              <span className="font-semibold text-neutral-700 truncate">{r.action}</span>
+              <span className="text-[10px] text-neutral-400 shrink-0">{new Date(r.createdAt).toLocaleString()}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -441,6 +633,11 @@ export default function ConnectorsPage() {
   const [activeTab, setActiveTab] = React.useState<'installed' | 'marketplace' | 'logs'>('installed');
   const [search, setSearch] = React.useState('');
   const [expandedConnectorId, setExpandedConnectorId] = React.useState<string | null>(null);
+  const [showImportForm, setShowImportForm] = React.useState<'openapi' | 'swagger' | null>(null);
+  const [importUrl, setImportUrl] = React.useState('');
+  const [importName, setImportName] = React.useState('');
+  const importOpenApi = useImportConnectorOpenApi();
+  const importSwagger = useImportConnectorSwagger();
 
   // Sync tab state with sub-routes
   React.useEffect(() => {
@@ -513,14 +710,72 @@ export default function ConnectorsPage() {
                   className="w-full text-xs rounded border border-neutral-200 pl-9 pr-3 py-2 bg-white text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
-              <button
-                onClick={() => handleTabChange('marketplace')}
-                className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-900 text-white font-bold text-xs px-3.5 py-2 rounded-md transition mb-5"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Install Connector</span>
-              </button>
+              <div className="flex items-center gap-2 mb-5">
+                <button
+                  onClick={() => handleTabChange('marketplace')}
+                  className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-900 text-white font-bold text-xs px-3.5 py-2 rounded-md transition"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Install Connector</span>
+                </button>
+                <button
+                  onClick={() => setShowImportForm(showImportForm === 'openapi' ? null : 'openapi')}
+                  className="flex items-center gap-1.5 border border-neutral-200 text-neutral-600 font-bold text-xs px-3 py-2 rounded-md hover:bg-neutral-50 transition"
+                >
+                  OpenAPI Import
+                </button>
+                <button
+                  onClick={() => setShowImportForm(showImportForm === 'swagger' ? null : 'swagger')}
+                  className="flex items-center gap-1.5 border border-neutral-200 text-neutral-600 font-bold text-xs px-3 py-2 rounded-md hover:bg-neutral-50 transition"
+                >
+                  Swagger Import
+                </button>
+              </div>
             </div>
+
+            {showImportForm && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const mutation = showImportForm === 'openapi' ? importOpenApi : importSwagger;
+                  mutation.mutate(
+                    { url: importUrl.trim() || undefined, name: importName.trim() },
+                    { onSuccess: () => { setShowImportForm(null); setImportUrl(''); setImportName(''); } },
+                  );
+                }}
+                className="mb-4 flex items-end gap-3 border border-neutral-100 rounded-lg bg-neutral-50 p-4"
+              >
+                <div className="flex-1 space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-neutral-400">
+                    {showImportForm === 'openapi' ? 'OpenAPI' : 'Swagger'} Spec URL or paste below
+                  </label>
+                  <input
+                    value={importUrl}
+                    onChange={(e) => setImportUrl(e.target.value)}
+                    placeholder="https://api.example.com/openapi.json"
+                    className="w-full text-xs border border-neutral-200 rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <div className="space-y-1 w-48">
+                  <label className="text-[10px] font-bold uppercase text-neutral-400">Connector Name *</label>
+                  <input
+                    value={importName}
+                    onChange={(e) => setImportName(e.target.value)}
+                    required
+                    placeholder="My API"
+                    className="w-full text-xs border border-neutral-200 rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={!importName.trim() || importOpenApi.isPending || importSwagger.isPending}
+                  className="text-xs font-bold bg-primary-600 text-white rounded px-3 py-1.5 hover:bg-primary-700 disabled:opacity-50 transition"
+                >
+                  {importOpenApi.isPending || importSwagger.isPending ? 'Importing…' : 'Import'}
+                </button>
+                <button type="button" onClick={() => setShowImportForm(null)} className="text-xs text-neutral-400 hover:text-neutral-700 px-2">✕</button>
+              </form>
+            )}
 
             {isLoading ? (
               <p className="text-center text-xs text-neutral-400 animate-pulse py-8">Loading integrations...</p>
@@ -579,8 +834,12 @@ export default function ConnectorsPage() {
                     {expandedConnectorId === item.id && (
                       <>
                         <ConfigureConnectorForm connector={item} />
+                        <ConnectorHealthPanel connectorId={item.id} />
+                        <ConnectorCapabilitiesPanel connectorId={item.id} />
+                        <ConnectorInstancesPanel connectorId={item.id} />
                         <ConnectorWebhooks connectorId={item.id} />
                         <ExecutionHistory connectorId={item.id} />
+                        <ConnectorAuditPanel connectorId={item.id} />
                       </>
                     )}
                   </div>

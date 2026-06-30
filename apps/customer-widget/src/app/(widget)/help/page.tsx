@@ -4,15 +4,25 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, BookOpen, Search } from 'lucide-react';
 import { EmptyState, Spinner } from '@easydev/ui';
-import { useWidgetKnowledgeSearch, useWidgetArticle } from '../../../hooks/useWidgetQueries';
+import { useWidgetKnowledgeSearch, useWidgetArticle, useTrackWidgetEvent } from '../../../hooks/useWidgetQueries';
+import { useWidgetStore } from '../../../store/widgetStore';
 
 export default function WidgetHelpPage() {
   const router = useRouter();
   const [query, setQuery] = React.useState('');
   const [activeSlug, setActiveSlug] = React.useState<string | null>(null);
+  const sessionId = useWidgetStore((state) => state.widgetSessionId);
+  const trackEvent = useTrackWidgetEvent();
 
   const { data: results = [], isLoading: isSearching } = useWidgetKnowledgeSearch(query);
   const { data: article, isLoading: isLoadingArticle } = useWidgetArticle(activeSlug);
+
+  const handleOpenArticle = (slug: string, title: string) => {
+    setActiveSlug(slug);
+    if (sessionId) {
+      trackEvent.mutate({ sessionId, eventName: 'article_view', eventData: { slug, title } });
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-neutral-50/50 text-xs relative overflow-hidden">
@@ -65,7 +75,7 @@ export default function WidgetHelpPage() {
                 {results.map((r) => (
                   <li key={r.id}>
                     <button
-                      onClick={() => setActiveSlug(r.slug)}
+                      onClick={() => handleOpenArticle(r.slug, r.title)}
                       className="w-full text-left px-4 py-3 hover:bg-white transition flex items-center gap-2.5"
                     >
                       <BookOpen className="h-4 w-4 text-neutral-400 shrink-0" />

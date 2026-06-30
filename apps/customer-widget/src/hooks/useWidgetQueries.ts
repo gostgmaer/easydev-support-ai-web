@@ -416,6 +416,22 @@ export function useEndWidgetSession() {
   });
 }
 
+// 5c. LEAD CAPTURE (public — only x-tenant-id, no session token required)
+export interface WidgetLeadCapturePayload {
+  email: string;
+  name?: string;
+  phone?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export function useCaptureLead() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: (payload: WidgetLeadCapturePayload) =>
+      apiClient.post<{ id: string }>('/v1/widget/lead/capture', payload, { skipAuth: true }),
+  });
+}
+
 // 6. FEEDBACK / CSAT
 export function useSubmitWidgetFeedback() {
   const apiClient = useApiClient();

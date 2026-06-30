@@ -27,6 +27,8 @@ import {
   ToggleLeft,
   ClipboardList,
   AlertTriangle,
+  FileText,
+  Layers,
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -57,8 +59,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: 'Agents', href: '/agents', icon: User },
     { label: 'Teams', href: '/teams', icon: Users },
     { label: 'Customers', href: '/customers', icon: UserSquare2 },
+    { label: 'Segments', href: '/segments', icon: Layers },
     { label: 'Ticket Categories', href: '/ticket-categories', icon: Tags },
     { label: 'Channels', href: '/channels', icon: Radio },
+    { label: 'Message Templates', href: '/message-templates', icon: FileText },
+    { label: 'Dashboards', href: '/dashboards', icon: LayoutDashboard },
     { label: 'Connectors', href: '/connectors', icon: Database },
     { label: 'Knowledge Base', href: '/knowledge', icon: ShieldCheck },
     { label: 'AI Management', href: '/ai', icon: Cpu },
@@ -71,6 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: 'Overrides & Governance', href: '/overrides', icon: ToggleLeft },
     { label: 'Billing & Subscriptions', href: '/billing', icon: CreditCard },
     { label: 'Settings', href: '/settings', icon: Settings },
+    { label: 'My Profile', href: '/profile', icon: User },
   ];
 
   const sidebarNavigation = (
