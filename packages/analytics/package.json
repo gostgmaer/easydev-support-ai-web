@@ -13,7 +13,9 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -31,7 +33,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.0.1",
-    "next": "15.1.0",
+    "next": "15.1.11",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2"
   }
