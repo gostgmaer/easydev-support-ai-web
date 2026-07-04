@@ -3,7 +3,13 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { useWidgetStore } from '../../../store/widgetStore';
-import { useConversationTimeline, useSendWidgetMessage, useUploadWidgetAttachment } from '../../../hooks/useWidgetQueries';
+import {
+  useConversationTimeline,
+  useSendWidgetMessage,
+  useUploadWidgetAttachment,
+  ALLOWED_ATTACHMENT_MIME_TYPES,
+  MAX_ATTACHMENT_SIZE_BYTES,
+} from '../../../hooks/useWidgetQueries';
 import { useWidgetRealtime } from '../../../hooks/useWidgetRealtime';
 import { WidgetChat, WidgetInput, Spinner, ConnectionStatus } from '@easydev/ui';
 import { useRealtimeStore } from '@easydev/realtime';
@@ -31,6 +37,7 @@ export default function WidgetChatPage() {
   const uploadAttachmentMutation = useUploadWidgetAttachment();
   const connectionStatus = useRealtimeStore((state) => state.connectionStatus);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [attachmentError, setAttachmentError] = React.useState<string | null>(null);
 
   const handleInputChange = (val: string) => {
     setComposerText(val);
@@ -60,7 +67,21 @@ export default function WidgetChatPage() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !activeConversationId) return;
-    uploadAttachmentMutation.mutate({ conversationId: activeConversationId, file });
+
+    if (!ALLOWED_ATTACHMENT_MIME_TYPES.has(file.type)) {
+      setAttachmentError(`"${file.name}" isn't a supported file type.`);
+      return;
+    }
+    if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+      setAttachmentError(`"${file.name}" is too large (max ${MAX_ATTACHMENT_SIZE_BYTES / (1024 * 1024)}MB).`);
+      return;
+    }
+
+    setAttachmentError(null);
+    uploadAttachmentMutation.mutate(
+      { conversationId: activeConversationId, file },
+      { onError: () => setAttachmentError(`"${file.name}" failed to upload. Please try again.`) },
+    );
   };
 
   const handleHumanEscalation = () => {
@@ -180,9 +201,29 @@ export default function WidgetChatPage() {
         </div>
       )}
 
+      {attachmentError && (
+        <div className="px-3 py-1.5 bg-danger-50 border-t border-danger-100 flex items-center justify-between gap-2 z-10 shrink-0">
+          <span className="text-danger-700">{attachmentError}</span>
+          <button
+            type="button"
+            onClick={() => setAttachmentError(null)}
+            className="text-danger-400 hover:text-danger-600 font-bold"
+            aria-label="Dismiss"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       {/* Input composer */}
       <div className="bg-white shrink-0 relative">
-        <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={Array.from(ALLOWED_ATTACHMENT_MIME_TYPES).join(',')}
+          className="hidden"
+          onChange={handleFileSelected}
+        />
         <WidgetInput
           value={composerText}
           onValueChange={handleInputChange}

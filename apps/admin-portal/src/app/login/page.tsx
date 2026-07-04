@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { GuestRoute, LoginForm } from '@easydev/auth';
+import { getSafeRedirectPath } from '@easydev/utils';
 
 function LoginContent() {
   const router = useRouter();
@@ -11,7 +12,7 @@ function LoginContent() {
   return (
     <LoginForm
       title="Sign in to Admin Portal"
-      onSuccess={() => router.replace(searchParams.get('redirectTo') ?? '/')}
+      onSuccess={() => router.replace(getSafeRedirectPath(searchParams.get('redirectTo'), '/'))}
     />
   );
 }
