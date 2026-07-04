@@ -2490,6 +2490,20 @@ export function useDeleteTicketCategory() {
 
 // ─── CUSTOMERS (admin view) ───────────────────────────────────────────────────
 
+export interface CustomerMetrics {
+  totalConversations: number;
+  totalTickets: number;
+  totalOrders: number;
+  totalSpend: number;
+  averageCsat: number;
+  averageResponseTime: number;
+  averageResolutionTime: number;
+  sentimentScore: number;
+  lifetimeValue: number;
+  riskScore: number;
+  vipStatus: boolean;
+}
+
 export interface AdminCustomer {
   id: string;
   email?: string;
@@ -2500,6 +2514,33 @@ export interface AdminCustomer {
   segmentIds: string[];
   attributes?: Record<string, unknown>;
   createdAt: string;
+  metrics?: CustomerMetrics;
+}
+
+export function useUpdateCustomerMetrics() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ customerId, ...dto }: { customerId: string } & Partial<CustomerMetrics>) =>
+      apiClient.put<CustomerMetrics>(`/v1/customer-metrics/${customerId}`, dto),
+    onSuccess: (_, { customerId }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'customers', customerId] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'customers'] });
+    },
+  });
+}
+
+export function useRecalculateCustomerMetrics() {
+  const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (customerId: string) =>
+      apiClient.post<CustomerMetrics>(`/v1/customer-metrics/${customerId}/recalculate`),
+    onSuccess: (_, customerId) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'customers', customerId] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'customers'] });
+    },
+  });
 }
 
 export interface CustomerSegment {
