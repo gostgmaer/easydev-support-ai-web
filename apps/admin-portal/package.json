@@ -17,6 +17,7 @@
     "@easydev/feature-flags": "workspace:*",
     "@easydev/observability": "workspace:*",
     "@easydev/permissions": "workspace:*",
+    "@easydev/realtime": "workspace:*",
     "@easydev/stores": "workspace:*",
     "@easydev/types": "workspace:*",
     "@easydev/ui": "workspace:*",
@@ -28,6 +29,7 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-hook-form": "^7.54.0",
+    "socket.io-client": "^4.8.1",
     "zod": "^3.24.1",
     "zustand": "^5.0.2"
   },

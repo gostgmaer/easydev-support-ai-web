@@ -11,6 +11,7 @@ import { AnalyticsProvider } from '@easydev/analytics';
 import { TenantBrandingProvider } from '@easydev/design-system';
 import { ObservabilityProvider, useTelemetry, ErrorBoundary } from '@easydev/observability';
 import { useBranding } from '@/hooks/useAdminQueries';
+import { useAdminRealtime } from '@/hooks/useAdminRealtime';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333';
 
@@ -84,6 +85,14 @@ function ForbiddenRedirectBridge({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Subscribes to the admin-facing realtime namespaces (system health, live
+ * analytics) for the lifetime of an authenticated session. Must render inside
+ * AuthProvider so the access token is available. */
+function AdminRealtimeBridge({ children }: { children: React.ReactNode }) {
+  useAdminRealtime();
+  return <>{children}</>;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
@@ -104,7 +113,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               <FeatureFlagsBridge>
                 <AnalyticsProvider app="admin-portal">
                   <ErrorBoundary>
-                    {children}
+                    <AdminRealtimeBridge>{children}</AdminRealtimeBridge>
                   </ErrorBoundary>
                 </AnalyticsProvider>
               </FeatureFlagsBridge>
