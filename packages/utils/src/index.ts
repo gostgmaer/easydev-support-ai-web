@@ -8,3 +8,4 @@ export * from './id';
 export * from './date';
 export * from './focus';
 export * from './cookies';
+export * from './safe-redirect';

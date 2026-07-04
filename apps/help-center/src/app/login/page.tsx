@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { GuestRoute, LoginForm } from '@easydev/auth';
+import { getSafeRedirectPath } from '@easydev/utils';
 
 function LoginContent() {
   const router = useRouter();
@@ -12,7 +13,7 @@ function LoginContent() {
     <LoginForm
       title="Sign in"
       subtitle="Sign in to manage your account and track support tickets."
-      onSuccess={() => router.replace(searchParams.get('redirectTo') ?? '/account')}
+      onSuccess={() => router.replace(getSafeRedirectPath(searchParams.get('redirectTo'), '/account'))}
     />
   );
 }

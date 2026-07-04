@@ -68,6 +68,7 @@ interface WidgetState {
   setIdentityVerified: (verified: boolean) => void;
   setMessages: (messages: WidgetMessage[]) => void;
   addMessage: (msg: WidgetMessage) => void;
+  removeMessage: (id: string) => void;
   setActiveConversationId: (id: string | null) => void;
   setAgentTyping: (typing: boolean) => void;
   setWidgetOpen: (open: boolean) => void;
@@ -108,6 +109,8 @@ export const useWidgetStore = create<WidgetState>((set) => ({
       if (state.messages.some((m) => m.id === msg.id)) return {};
       return { messages: [...state.messages, msg] };
     }),
+  removeMessage: (id) =>
+    set((state) => ({ messages: state.messages.filter((m) => m.id !== id) })),
   setActiveConversationId: (id) => set({ activeConversationId: id }),
   setAgentTyping: (isAgentTyping) => set({ isAgentTyping }),
   setWidgetOpen: (isWidgetOpen) => set({ isWidgetOpen }),

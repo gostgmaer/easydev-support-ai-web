@@ -22,6 +22,27 @@ const SENDER_TYPE_MAP: Record<string, WidgetMessage['senderType']> = {
   SYSTEM: 'system',
 };
 
+// Mirrors ALLOWED_ATTACHMENT_MIME_TYPES / MAX_ATTACHMENT_SIZE_BYTES in
+// src/modules/messages/controllers/widget-chat.controller.ts - validating
+// client-side too avoids a slow upload attempt (and a confusing generic
+// failure) for a file the server was always going to reject.
+export const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+export const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'video/mp4',
+  'audio/mpeg',
+  'audio/wav',
+]);
+
 export interface RawMessageAttachment {
   fileName: string;
   publicUrl?: string;
@@ -283,6 +304,7 @@ export function useUploadWidgetAttachment() {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const addMessage = useWidgetStore((state) => state.addMessage);
+  const removeMessage = useWidgetStore((state) => state.removeMessage);
 
   return useMutation({
     mutationFn: async ({ conversationId, file }: { conversationId: string; file: File }) => {
@@ -294,8 +316,9 @@ export function useUploadWidgetAttachment() {
       );
     },
     onMutate: async ({ file }) => {
+      const tempId = `temp-${Date.now()}`;
       const tempMessage: WidgetMessage = {
-        id: `temp-${Date.now()}`,
+        id: tempId,
         senderType: 'customer',
         senderName: 'You',
         content: file.name,
@@ -303,6 +326,13 @@ export function useUploadWidgetAttachment() {
         attachments: [{ name: file.name, url: URL.createObjectURL(file), size: file.size }],
       };
       addMessage(tempMessage);
+      return { tempId };
+    },
+    onError: (_error, _variables, context) => {
+      // The server rejected the upload (or the request failed outright) -
+      // remove the optimistic bubble rather than leaving a message that
+      // looks sent forever. The caller's own onError surfaces the reason.
+      if (context?.tempId) removeMessage(context.tempId);
     },
     onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['widget', 'messages', variables.conversationId] });

@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Users, Plus, Search, Trash2, Download, Tag, X, History, ExternalLink, UserPlus, UserMinus, Pencil, ChevronRight, GitMerge, Upload } from 'lucide-react';
+import { Users, Plus, Search, Trash2, Download, Tag, X, History, ExternalLink, UserPlus, UserMinus, Pencil, ChevronRight, GitMerge, Upload, RefreshCw } from 'lucide-react';
 import {
   useAdminCustomers,
   useAdminCustomerById,
@@ -18,9 +18,131 @@ import {
   useRemoveCustomerFromSegment,
   useMergeCustomers,
   useBulkImportCustomers,
+  useUpdateCustomerMetrics,
+  useRecalculateCustomerMetrics,
   type AdminCustomer,
   type CustomerSegment,
+  type CustomerMetrics,
 } from '../../../hooks/useAdminQueries';
+
+const METRICS_FIELDS: { key: keyof CustomerMetrics; label: string; kind: 'int' | 'number' | 'boolean' }[] = [
+  { key: 'totalConversations', label: 'Conversations', kind: 'int' },
+  { key: 'totalTickets', label: 'Tickets', kind: 'int' },
+  { key: 'totalOrders', label: 'Orders', kind: 'int' },
+  { key: 'totalSpend', label: 'Total Spend', kind: 'number' },
+  { key: 'averageCsat', label: 'Avg CSAT', kind: 'number' },
+  { key: 'averageResponseTime', label: 'Avg Response (s)', kind: 'int' },
+  { key: 'averageResolutionTime', label: 'Avg Resolution (s)', kind: 'int' },
+  { key: 'sentimentScore', label: 'Sentiment Score', kind: 'number' },
+  { key: 'lifetimeValue', label: 'Lifetime Value', kind: 'number' },
+  { key: 'riskScore', label: 'Risk Score', kind: 'number' },
+];
+
+function CustomerMetricsSection({ customerId, metrics }: { customerId: string; metrics?: CustomerMetrics }) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState<Partial<CustomerMetrics>>({});
+  const updateMutation = useUpdateCustomerMetrics();
+  const recalculateMutation = useRecalculateCustomerMetrics();
+
+  const startEditing = () => {
+    setDraft(metrics ?? {});
+    setEditing(true);
+  };
+
+  const handleSave = () => {
+    updateMutation.mutate({ customerId, ...draft }, { onSuccess: () => setEditing(false) });
+  };
+
+  return (
+    <div className="p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Metrics</h4>
+        <div className="flex items-center gap-2">
+          {!editing && (
+            <button
+              type="button"
+              onClick={() => recalculateMutation.mutate(customerId)}
+              disabled={recalculateMutation.isPending}
+              className="flex items-center gap-1 text-[10px] font-bold text-neutral-500 hover:text-neutral-800 disabled:opacity-50"
+              title="Recalculate from live conversation/ticket/order data"
+            >
+              <RefreshCw className={`h-3 w-3 ${recalculateMutation.isPending ? 'animate-spin' : ''}`} />
+              Recalculate
+            </button>
+          )}
+          {editing ? (
+            <>
+              <button type="button" onClick={() => setEditing(false)} className="text-[10px] text-neutral-500 hover:text-neutral-800">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={updateMutation.isPending}
+                className="text-[10px] font-bold text-primary-600 hover:text-primary-800 disabled:opacity-50"
+              >
+                {updateMutation.isPending ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={startEditing} className="p-1 rounded text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100" title="Edit metrics">
+              <Pencil className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!metrics && !editing ? (
+        <p className="text-[10px] italic text-neutral-400">No metrics recorded yet.</p>
+      ) : editing ? (
+        <div className="grid grid-cols-2 gap-3">
+          {METRICS_FIELDS.map(({ key, label, kind }) => (
+            <label key={key} className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{label}</span>
+              <input
+                type="number"
+                step={kind === 'number' ? '0.01' : '1'}
+                value={draft[key] as number | undefined ?? ''}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, [key]: e.target.value === '' ? undefined : Number(e.target.value) }))
+                }
+                className="mt-0.5 w-full text-xs rounded border border-neutral-200 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </label>
+          ))}
+          <label className="flex items-center gap-2 col-span-2">
+            <input
+              type="checkbox"
+              checked={draft.vipStatus ?? false}
+              onChange={(e) => setDraft((d) => ({ ...d, vipStatus: e.target.checked }))}
+              className="accent-primary-600"
+            />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">VIP Status</span>
+          </label>
+        </div>
+      ) : (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+          {METRICS_FIELDS.map(({ key, label }) => (
+            <div key={key}>
+              <dt className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{label}</dt>
+              <dd className="mt-0.5 font-semibold text-neutral-800">{metrics![key] ?? '—'}</dd>
+            </div>
+          ))}
+          <div>
+            <dt className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">VIP Status</dt>
+            <dd className="mt-0.5">
+              {metrics!.vipStatus ? (
+                <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded text-warning-700 bg-warning-100">VIP</span>
+              ) : (
+                <span className="text-neutral-400">—</span>
+              )}
+            </dd>
+          </div>
+        </dl>
+      )}
+    </div>
+  );
+}
 
 function CustomerDetailPanel({ customerId, onClose }: { customerId: string; onClose: () => void }) {
   const { data: customer, isLoading } = useAdminCustomerById(customerId);
@@ -99,6 +221,8 @@ function CustomerDetailPanel({ customerId, onClose }: { customerId: string; onCl
                 </dl>
               </div>
             )}
+
+            <CustomerMetricsSection customerId={customerId} metrics={customer.metrics} />
 
             <div className="p-5">
               <h4 className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-3 flex items-center gap-1.5">

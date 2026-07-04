@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { ApiProvider } from '@easydev/api-client';
+import { ApiProvider, createQueryClient } from '@easydev/api-client';
 import { useAuthStore, useFeatureFlagStore, useTenantStore } from '@easydev/stores';
 import type { LoginCredentials, UserProfileUpdate } from '@easydev/types';
 import { toAppError } from '@easydev/utils';
@@ -47,13 +47,20 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
     [baseUrl, onUnauthenticated],
   );
 
+  // Owned here (not inside ApiProvider) so switchTenant/logout can clear it directly -
+  // React Query cache keys aren't tenant-scoped, so without this a tenant switch or a
+  // different user logging in on the same tab would briefly (or indefinitely, within
+  // the 30s staleTime) render the previous tenant/user's cached data.
+  const [queryClient] = React.useState(() => createQueryClient());
+
   /** Clears every store this provider owns - used on logout, locally or via another tab. */
   const resetAllAuthState = React.useCallback(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     clearAuth();
     useTenantStore.getState().reset();
     useFeatureFlagStore.getState().reset();
-  }, [clearAuth]);
+    queryClient.clear();
+  }, [clearAuth, queryClient]);
 
   const scheduleRefresh = React.useCallback(
     (expiresAt: number) => {
@@ -85,6 +92,11 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
       setTenant(session.tenant);
       setAvailableTenants(session.memberships);
       scheduleRefresh(tokens.expiresAt);
+      // Query keys aren't tenant-scoped - on the initial mount bootstrap the
+      // cache is empty so this is a no-op, but on a cross-tab 'session-changed'
+      // broadcast (another tab switched tenant/logged in) this is what stops
+      // this tab from continuing to show the previous tenant's cached data.
+      queryClient.clear();
       return true;
     } catch {
       return false;
@@ -167,6 +179,7 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
         setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken, expiresAt: Date.now() + 15 * 60_000 });
         setTenant(result.tenant);
         useFeatureFlagStore.getState().reset();
+        queryClient.clear();
         const session = await iamClient.getSession();
         setSession(session);
         setAvailableTenants(session.memberships);
@@ -175,7 +188,7 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
         useTenantStore.getState().setSwitching(false);
       }
     },
-    [iamClient, setTokens, setTenant, setSession, setAvailableTenants],
+    [iamClient, setTokens, setTenant, setSession, setAvailableTenants, queryClient],
   );
 
   const updateProfile = React.useCallback(
@@ -202,7 +215,7 @@ export function AuthProvider({ children, baseUrl, onUnauthenticated }: AuthProvi
   );
 
   return (
-    <ApiProvider client={apiClient}>
+    <ApiProvider client={apiClient} queryClient={queryClient}>
       <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
     </ApiProvider>
   );

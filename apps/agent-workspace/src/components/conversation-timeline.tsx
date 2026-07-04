@@ -243,14 +243,22 @@ export function ConversationTimeline() {
     }
   }, [messages, typingUsers]);
 
-  // Opening a conversation marks it read for this agent (durable) and
-  // broadcasts a live read-receipt to other connected agents.
+  // Opening a conversation marks it read for this agent (durable).
   useEffect(() => {
     if (!activeConversationId) return;
     markReadMutation.mutate(activeConversationId);
-    emitRead(activeConversationId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId]);
+
+  // Broadcasts a live, message-scoped read-receipt to other connected agents
+  // once the latest message in the open conversation is known - re-fires as
+  // new messages arrive while it stays open, advancing the read position.
+  const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : undefined;
+  useEffect(() => {
+    if (!activeConversationId || !lastMessageId) return;
+    emitRead(activeConversationId, lastMessageId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId, lastMessageId]);
 
   if (!activeConversationId) {
     return (

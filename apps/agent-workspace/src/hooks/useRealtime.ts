@@ -132,6 +132,7 @@ export function useRealtime(agentId?: string) {
 
   const updateConversation = useInboxStore((state) => state.updateConversation);
   const updateTicket = useTicketStore((state) => state.updateTicket);
+  const updateMessageReadReceipts = useConversationStore((state) => state.updateMessageReadReceipts);
 
   const setAiSession = useAiStore((state) => state.setSession);
   const addAiEscalation = useAiStore((state) => state.addEscalation);
@@ -250,9 +251,19 @@ export function useRealtime(agentId?: string) {
         setTyping(data.conversationId, data.userId, data.userId, data.isTyping);
       },
     );
-    // inbox.read-receipt is conversation-scoped on the backend (no messageId), so it
-    // can't drive the per-message read-receipt UI without fabricating a messageId.
-    // Left unwired until the backend carries enough data to do this honestly.
+    socket.on(
+      'inbox.read-receipt',
+      (data: { conversationId: string; messageId: string; userId: string; readAt: string }) => {
+        const message = useConversationStore
+          .getState()
+          .messages[data.conversationId]?.find((m) => m.id === data.messageId);
+        const otherReceipts = (message?.readReceipts ?? []).filter((r) => r.userId !== data.userId);
+        updateMessageReadReceipts(data.conversationId, data.messageId, [
+          ...otherReceipts,
+          { userId: data.userId, timestamp: data.readAt },
+        ]);
+      },
+    );
 
     socket.on('ticket.updated', (msg: RealtimeEnvelope<Ticket & { conversationId?: string }>) => {
       const t = msg.data as any;
@@ -338,6 +349,7 @@ export function useRealtime(agentId?: string) {
       socket.off('inbox.status.changed');
       socket.off('inbox.presence.updated');
       socket.off('inbox.typing');
+      socket.off('inbox.read-receipt');
       socket.off('ticket.updated');
       socket.off('ai.escalation.updated');
       socket.off('ai.session.updated');
@@ -351,6 +363,7 @@ export function useRealtime(agentId?: string) {
     setTyping,
     updateConversation,
     updateTicket,
+    updateMessageReadReceipts,
     setAiSession,
     addAiEscalation,
     resolveAiEscalation,
@@ -362,8 +375,8 @@ export function useRealtime(agentId?: string) {
     socket?.emit('typing', { conversationId, isTyping });
   };
 
-  const emitRead = (conversationId: string) => {
-    socket?.emit('read-receipt', { conversationId });
+  const emitRead = (conversationId: string, messageId: string) => {
+    socket?.emit('read-receipt', { conversationId, messageId });
   };
 
   // The real gateway only has tenant-wide and user-wide rooms - there is no
