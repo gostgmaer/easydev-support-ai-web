@@ -22,7 +22,7 @@ const CONNECT_SRC = `connect-src 'self' ${apiOrigin} ${socketOrigin} ${socketWsO
 // app outright in dev. Production builds need neither, so only dev gets the
 // relaxed policy.
 const isDev = process.env.NODE_ENV !== 'production';
-const SCRIPT_SRC = isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self'";
+const SCRIPT_SRC = isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'";
 
 const COMMON_SECURITY_HEADERS = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
