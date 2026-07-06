@@ -22,7 +22,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 const scriptSrc = isDev
   ? "'self' 'unsafe-inline' 'unsafe-eval'"
-  : "'self'";
+  : "'self' 'unsafe-inline'";
 
 const CSP = [
   "default-src 'self'",
